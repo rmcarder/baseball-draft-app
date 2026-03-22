@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fantasy Baseball Draft Board</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #06090F;
+  --s0:       #0B1120;
+  --s1:       #0F1729;
+  --s2:       #141F35;
+  --s3:       #1A2840;
+  --bd:       #1E2F4A;
+  --bd2:      #263855;
+  --tx:       #DCE8F5;
+  --tx2:      #6B82A0;
+  --tx3:      #344E6A;
+  --acc:      #00C8FF;
+  --acc-bg:   rgba(0,200,255,0.08);
+  --acc-bg2:  rgba(0,200,255,0.14);
+
+  --C:   #F59E0B;
+  --1B:  #F87171;
+  --2B:  #FB923C;
+  --3B:  #FBBF24;
+  --SS:  #34D399;
+  --OF:  #22D3EE;
+  --SP:  #60A5FA;
+  --RP:  #C084FC;
+  --UTIL:#A3E635;
+
+  --t1: #F59E0B;
+  --t2: #60A5FA;
+  --t3: #34D399;
+  --t4: #A78BFA;
+  --t5: #475569;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--tx);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* ── Layout shell ── */
+.app {
+  display: grid;
+  grid-template-rows: 48px auto auto 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: var(--s0);
+  border-bottom: 1px solid var(--bd);
+  flex-shrink: 0;
+}
+
+.hdr-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tx);
+}
+.hdr-title em { color: var(--acc); font-style: normal; }
+
+.hdr-meta {
+  display: flex;
+  gap: 28px;
+  align-items: center;
+}
+
+.hdr-stat { text-align: right; }
+.hdr-stat-lbl {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--tx3);
+  font-family: 'Barlow Condensed', sans-serif;
+}
+.hdr-stat-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  color: var(--acc);
+  line-height: 1;
+}
+
+/* ── Scatter row ── */
+.scatter-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  background: var(--bd);
+  gap: 1px;
+  border-bottom: 1px solid var(--bd);
+  flex-shrink: 0;
+}
+
+.scatter-panel {
+  background: var(--s0);
+  padding: 10px 14px 8px;
+}
+
+.scatter-lbl {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tx);
+  margin-bottom: 4px;
+}
+
+.scatter-svg { display: block; width: 100%; }
+
+.scatter-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--tx);
+  font-family: 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Controls ── */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  background: var(--s1);
+  border-bottom: 1px solid var(--bd);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.ctrl-lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--tx3);
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+.pills { display: flex; gap: 3px; flex-wrap: wrap; }
+
+.pill {
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  border: 1px solid var(--bd2);
+  background: var(--s2);
+  color: var(--tx2);
+  transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+.pill:hover { color: var(--tx); border-color: var(--bd2); }
+.pill.active { color: var(--bg); border-color: transparent; }
+.pill[data-pos="ALL"].active  { background: var(--acc); }
+.pill[data-pos="C"].active    { background: var(--C); }
+.pill[data-pos="1B"].active   { background: var(--1B); }
+.pill[data-pos="2B"].active   { background: var(--2B); }
+.pill[data-pos="3B"].active   { background: var(--3B); }
+.pill[data-pos="SS"].active   { background: var(--SS); }
+.pill[data-pos="OF"].active   { background: var(--OF); }
+.pill[data-pos="SP"].active   { background: var(--SP); }
+.pill[data-pos="RP"].active   { background: var(--RP); }
+.pill[data-pos="UTIL"].active { background: var(--UTIL); }
+
+.sep { width: 1px; height: 22px; background: var(--bd); flex-shrink: 0; }
+
+.drafted-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--tx2);
+  user-select: none;
+  font-family: 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.04em;
+}
+.tog-box {
+  width: 15px; height: 15px;
+  border: 1px solid var(--bd2);
+  border-radius: 3px;
+  background: var(--s2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; color: transparent;
+  transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tog-box.on { background: var(--acc); border-color: var(--acc); color: var(--bg); }
+
+.ctrl-right {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--tx2);
+}
+.ctrl-right b { color: var(--acc); font-weight: 500; }
+
+/* ── Table ── */
+.tbl-wrap {
+  overflow: auto;
+  background: var(--s0);
+  min-height: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  table-layout: fixed;
+}
+
+thead {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--s2);
+}
+
+th {
+  padding: 7px 8px;
+  text-align: right;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tx2);
+  border-bottom: 1px solid var(--bd);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+th:hover { color: var(--tx); }
+th.sa   { color: var(--acc); }
+th.lft  { text-align: left; }
+.si { display: inline-block; margin-left: 2px; opacity: 0.35; font-size: 8px; }
+th.sa .si { opacity: 1; }
+
+/* Sticky cols */
+th:nth-child(1), td:nth-child(1) { position: sticky; left: 0;    z-index: 5; width: 36px;  text-align: center; }
+th:nth-child(2), td:nth-child(2) { position: sticky; left: 36px; z-index: 5; width: 36px;  text-align: center; }
+th:nth-child(3), td:nth-child(3) { position: sticky; left: 72px; z-index: 5; width: 190px; text-align: left;   }
+th:nth-child(4), td:nth-child(4) { position: sticky; left: 262px;z-index: 5; width: 52px;  text-align: left;   }
+
+thead th:nth-child(1),
+thead th:nth-child(2),
+thead th:nth-child(3),
+thead th:nth-child(4) { background: var(--s2); }
+
+tbody tr td:nth-child(1),
+tbody tr td:nth-child(2),
+tbody tr td:nth-child(3),
+tbody tr td:nth-child(4) { background: inherit; }
+
+tbody tr { background: var(--s0); border-bottom: 1px solid var(--bd); transition: background 0.22s cubic-bezier(0.4, 0, 0.2, 1); }
+tbody tr:nth-child(even) { background: var(--s1); }
+tbody tr:hover, tbody tr.hl { background: var(--acc-bg2) !important; }
+tbody tr.drafted { opacity: 0.3; }
+
+td {
+  padding: 5px 8px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--tx);
+}
+td.rank { text-align: center; color: var(--tx3); font-size: 10px; }
+td.pcell { font-family: 'DM Sans', sans-serif; padding: 3px 8px; }
+.pname { font-size: 12px; font-weight: 500; color: var(--tx); line-height: 1.3; }
+.pteam { font-size: 9px; color: var(--tx2); font-weight: 300; }
+
+/* Position pill */
+.pp {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: #06090F;
+  letter-spacing: 0.04em;
+}
+.pp-C   { background: var(--C);  }
+.pp-1B  { background: var(--1B); }
+.pp-2B  { background: var(--2B); }
+.pp-3B  { background: var(--3B); }
+.pp-SS  { background: var(--SS); }
+.pp-OF  { background: var(--OF); }
+.pp-SP  { background: var(--SP); }
+.pp-RP   { background: var(--RP); }
+.pp-UTIL { background: var(--UTIL); }
+
+/* Tier badge */
+.tb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px; height: 18px;
+  border-radius: 3px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: #06090F;
+}
+.tb1 { background: var(--t1); }
+.tb2 { background: var(--t2); }
+.tb3 { background: var(--t3); }
+.tb4 { background: var(--t4); }
+.tb5,.tb6,.tb7,.tb8,.tb9,.tb10 { background: var(--s3); color: var(--tx2); }
+
+.pos-num { color: #34D399; }
+.neg-num { color: #F87171; }
+.dim-num { color: var(--tx3); }
+
+/* Draft button */
+.dbtn {
+  padding: 2px 9px;
+  border-radius: 3px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: 1px solid var(--bd2);
+  background: transparent;
+  color: var(--tx2);
+  transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+.dbtn:hover { background: var(--acc); border-color: var(--acc); color: var(--bg); }
+.dbtn.undraft { color: var(--tx3); border-color: var(--bd); }
+.dbtn.undraft:hover { background: #F87171; border-color: #F87171; color: var(--bg); }
+
+/* Tooltip */
+.tip {
+  position: fixed;
+  background: var(--s2);
+  border: 1px solid var(--bd2);
+  border-radius: 5px;
+  padding: 8px 12px;
+  font-size: 11px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 9999;
+  min-width: 160px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.tip.show { opacity: 1; }
+.tip-name { font-weight: 500; color: var(--tx); font-size: 12px; margin-bottom: 6px; }
+.tip-team { color: var(--tx2); font-weight: 300; font-size: 10px; }
+.tip-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+}
+.tip-k { color: var(--tx2); }
+.tip-v { color: var(--acc); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--s0); }
+::-webkit-scrollbar-thumb { background: var(--bd2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--tx3); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header class="hdr">
+    <div class="hdr-title">Fantasy Baseball &nbsp;<em>Draft Board</em></div>
+    <div class="hdr-meta">
+      <div class="hdr-stat">
+        <div class="hdr-stat-lbl">Available</div>
+        <div class="hdr-stat-val" id="s-avail">—</div>
+      </div>
+      <div class="hdr-stat">
+        <div class="hdr-stat-lbl">Drafted</div>
+        <div class="hdr-stat-val" id="s-drafted">0</div>
+      </div>
+      <div class="hdr-stat">
+        <div class="hdr-stat-lbl">Round</div>
+        <div class="hdr-stat-val" id="s-round">1</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Scatter plots -->
+  <div class="scatter-row">
+    <div class="scatter-panel">
+      <div class="scatter-lbl" id="lbl-f">All Players — Total SGP vs Value Above Replacement</div>
+      <svg id="sv-f" class="scatter-svg"></svg>
+      <div class="scatter-legend" id="leg-f"></div>
+    </div>
+    <div class="scatter-panel">
+      <div class="scatter-lbl">Hitters — Total SGP vs Value Above Replacement</div>
+      <svg id="sv-h" class="scatter-svg"></svg>
+      <div class="scatter-legend" id="leg-h"></div>
+    </div>
+    <div class="scatter-panel">
+      <div class="scatter-lbl">Pitchers — Total SGP vs Value Above Replacement</div>
+      <svg id="sv-p" class="scatter-svg"></svg>
+      <div class="scatter-legend" id="leg-p"></div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <span class="ctrl-lbl">Position</span>
+    <div class="pills" id="pos-pills">
+      <button class="pill active" data-pos="ALL">ALL</button>
+      <button class="pill" data-pos="C">C</button>
+      <button class="pill" data-pos="1B">1B</button>
+      <button class="pill" data-pos="2B">2B</button>
+      <button class="pill" data-pos="3B">3B</button>
+      <button class="pill" data-pos="SS">SS</button>
+      <button class="pill" data-pos="OF">OF</button>
+      <button class="pill" data-pos="SP">SP</button>
+      <button class="pill" data-pos="RP">RP</button>
+      <button class="pill" data-pos="UTIL">UTIL</button>
+    </div>
+    <div class="sep"></div>
+    <div class="drafted-toggle" id="tog-wrap">
+      <div class="tog-box" id="tog">✓</div>
+      <span>Show drafted</span>
+    </div>
+    <div class="sep"></div>
+    <div class="drafted-toggle" id="stat-tog-wrap">
+      <div class="tog-box" id="stat-tog">✓</div>
+      <span>Raw stats</span>
+    </div>
+    <input id="search" type="text" placeholder="Search player…" style="
+      background: var(--s2); border: 1px solid var(--bd2); border-radius: 99px;
+      color: var(--tx); font-family: 'DM Sans', sans-serif; font-size: 12px;
+      padding: 4px 14px; outline: none; width: 240px;
+    " />
+    <div class="ctrl-right">
+      <b id="c-drafted">0</b> drafted &nbsp;·&nbsp; <b id="c-avail">—</b> available
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="tbl-wrap">
+    <table>
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- Tooltip -->
+<div class="tip" id="tip">
+  <div class="tip-name" id="tip-name"></div>
+  <div class="tip-grid" id="tip-grid"></div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let ALL = [], drafted = new Set(), hovered = null;
+let sortCol = 'VAR', sortDir = 'desc', posFil = new Set(), showDrafted = false, searchQ = '', showRawStats = false;
+
+const POS_COLORS = {
+  C:'#F59E0B','1B':'#F87171','2B':'#FB923C','3B':'#FBBF24',
+  SS:'#34D399',OF:'#22D3EE',SP:'#60A5FA',RP:'#C084FC',UTIL:'#A3E635'
+};
+const HPOS = ['C','1B','2B','3B','SS','OF','UTIL'];
+const PPOS = ['SP','RP'];
+const NUM_COLS = ['Total_SGP','VAR','Tier','OverallRank',
+  'RSGP','HRSGP','RBISGP','SBSGP','OBPSGP',
+  'KSGP','QSSGP','SVSGP','ERASGP','WHIPSGP',
+  'R','HR','RBI','OBP','SB','K','QS','SV','ERA','WHIP'];
+
+// ── Data ─────────────────────────────────────────────────────────────────────
+const PLAYER_DATA = [{"Player":"Aaron Judge (NYY - LF,CF,RF,DH)","POS":"OF","POSRANK":1,"Total_SGP":23.042,"RSGP":5.6707,"HRSGP":5.6897,"RBISGP":6.1719,"SBSGP":0.8116,"OBPSGP":4.6981,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":110,"HR":46,"RBI":114,"SB":9,"OBP":0.417,"AB":520,"H":152,"BB":112,"Repl_SGP":11.2129,"VAR":11.8291,"OverallRank":1,"label":"Aaron Judge (NYY - LF,CF,RF,DH) (OF) SGP: 23.04 | VAR: 11.83","Jenks":"10","Tier":1},{"Player":"Juan Soto (NYM - LF,RF)","POS":"OF","POSRANK":2,"Total_SGP":21.8121,"RSGP":5.6191,"HRSGP":4.5765,"RBISGP":5.3598,"SBSGP":1.8938,"OBPSGP":4.3629,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":109,"HR":37,"RBI":99,"SB":21,"OBP":0.408,"AB":543,"H":148,"BB":123,"Repl_SGP":11.2129,"VAR":10.5992,"OverallRank":2,"label":"Juan Soto (NYM - LF,RF) (OF) SGP: 21.81 | VAR: 10.6","Jenks":"10","Tier":1},{"Player":"Tarik Skubal (DET - SP)","POS":"SP","POSRANK":2,"Total_SGP":13.0549,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":3.0602,"QSSGP":2.8394,"SVSGP":0,"ERASGP":2.9264,"WHIPSGP":4.229,"K":234,"QS":21,"SV":0,"IP":193.3,"ER":58,"ERA":2.72,"WHIP":0.97,"Hits":148,"Walks":40,"Repl_SGP":3.1019,"VAR":9.953,"OverallRank":3,"label":"Tarik Skubal (DET - SP) (SP) SGP: 13.05 | VAR: 9.95","Jenks":"10","Tier":1},{"Player":"Shohei Ohtani (LAD - SP,DH)","POS":"UTIL","POSRANK":1,"Total_SGP":23.3964,"RSGP":6.3924,"HRSGP":5.8133,"RBISGP":6.0095,"SBSGP":2.1643,"OBPSGP":3.0168,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":124,"HR":47,"RBI":111,"SB":24,"OBP":0.382,"AB":572,"H":162,"BB":92,"Repl_SGP":14.4242,"VAR":8.9722,"OverallRank":4,"label":"Shohei Ohtani (LAD - SP,DH) (UTIL) SGP: 23.4 | VAR: 8.97","Jenks":"10","Tier":1},{"Player":"Paul Skenes (PIT - SP)","POS":"SP","POSRANK":3,"Total_SGP":11.0113,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.8901,"QSSGP":2.7042,"SVSGP":0,"ERASGP":2.5462,"WHIPSGP":2.8708,"K":221,"QS":20,"SV":0,"IP":186,"ER":58,"ERA":2.79,"WHIP":1.04,"Hits":146,"Walks":48,"Repl_SGP":3.1019,"VAR":7.9094,"OverallRank":5,"label":"Paul Skenes (PIT - SP) (SP) SGP: 11.01 | VAR: 7.91","Jenks":"9","Tier":2},{"Player":"Ronald Acuna Jr. (ATL - RF)","POS":"OF","POSRANK":3,"Total_SGP":18.5921,"RSGP":5.4645,"HRSGP":3.7106,"RBISGP":4.3312,"SBSGP":2.2545,"OBPSGP":2.8313,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":106,"HR":30,"RBI":80,"SB":25,"OBP":0.384,"AB":540,"H":152,"BB":88,"Repl_SGP":11.2129,"VAR":7.3792,"OverallRank":6,"label":"Ronald Acuna Jr. (ATL - RF) (OF) SGP: 18.59 | VAR: 7.38","Jenks":"9","Tier":2},{"Player":"Garrett Crochet (BOS - SP)","POS":"SP","POSRANK":4,"Total_SGP":10.2209,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":3.0209,"QSSGP":2.569,"SVSGP":0,"ERASGP":2.1129,"WHIPSGP":2.5181,"K":231,"QS":19,"SV":0,"IP":189.4,"ER":63,"ERA":3.01,"WHIP":1.07,"Hits":153,"Walks":49,"Repl_SGP":3.1019,"VAR":7.119,"OverallRank":7,"label":"Garrett Crochet (BOS - SP) (SP) SGP: 10.22 | VAR: 7.12","Jenks":"9","Tier":2},{"Player":"Jose Ramirez (CLE - 3B,DH)","POS":"3B","POSRANK":1,"Total_SGP":16.8409,"RSGP":4.6912,"HRSGP":3.4633,"RBISGP":4.8184,"SBSGP":2.976,"OBPSGP":0.892,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":91,"HR":28,"RBI":89,"SB":33,"OBP":0.344,"AB":580,"H":159,"BB":62,"Repl_SGP":9.86,"VAR":6.9809,"OverallRank":8,"label":"Jose Ramirez (CLE - 3B,DH) (3B) SGP: 16.84 | VAR: 6.98","Jenks":"9","Tier":2},{"Player":"Cal Raleigh (SEA - C,DH)","POS":"C","POSRANK":1,"Total_SGP":15.5972,"RSGP":4.485,"HRSGP":4.9475,"RBISGP":5.4681,"SBSGP":0.7214,"OBPSGP":-0.0249,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":87,"HR":40,"RBI":101,"SB":8,"OBP":0.326,"AB":542,"H":126,"BB":76,"Repl_SGP":9.228,"VAR":6.3692,"OverallRank":9,"label":"Cal Raleigh (SEA - C,DH) (C) SGP: 15.6 | VAR: 6.37","Jenks":"9","Tier":2},{"Player":"Kyle Tucker (LAD - RF,DH)","POS":"OF","POSRANK":5,"Total_SGP":17.5643,"RSGP":4.8974,"HRSGP":3.7106,"RBISGP":5.035,"SBSGP":1.8938,"OBPSGP":2.0274,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":95,"HR":30,"RBI":93,"SB":21,"OBP":0.368,"AB":530,"H":143,"BB":82,"Repl_SGP":11.2129,"VAR":6.3514,"OverallRank":10,"label":"Kyle Tucker (LAD - RF,DH) (OF) SGP: 17.56 | VAR: 6.35","Jenks":"9","Tier":2},{"Player":"Kyle Schwarber (PHI - LF,DH)","POS":"OF","POSRANK":8,"Total_SGP":17.4273,"RSGP":5.0521,"HRSGP":5.1949,"RBISGP":5.5764,"SBSGP":0.5411,"OBPSGP":1.0629,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":98,"HR":42,"RBI":103,"SB":6,"OBP":0.346,"AB":556,"H":129,"BB":98,"Repl_SGP":11.2129,"VAR":6.2144,"OverallRank":11,"label":"Kyle Schwarber (PHI - LF,DH) (OF) SGP: 17.43 | VAR: 6.21","Jenks":"9","Tier":2},{"Player":"Bobby Witt Jr. (KC - SS)","POS":"SS","POSRANK":1,"Total_SGP":17.9023,"RSGP":5.2067,"HRSGP":3.587,"RBISGP":5.035,"SBSGP":3.0661,"OBPSGP":1.0075,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":101,"HR":29,"RBI":93,"SB":34,"OBP":0.345,"AB":604,"H":177,"BB":49,"Repl_SGP":12.0377,"VAR":5.8646,"OverallRank":12,"label":"Bobby Witt Jr. (KC - SS) (SS) SGP: 17.9 | VAR: 5.86","Jenks":"9","Tier":2},{"Player":"Bryan Woo (SEA - SP)","POS":"SP","POSRANK":5,"Total_SGP":8.6092,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.4717,"QSSGP":2.4338,"SVSGP":0,"ERASGP":1.0068,"WHIPSGP":2.697,"K":189,"QS":18,"SV":0,"IP":186.9,"ER":71,"ERA":3.4,"WHIP":1.05,"Hits":157,"Walks":40,"Repl_SGP":3.1019,"VAR":5.5073,"OverallRank":13,"label":"Bryan Woo (SEA - SP) (SP) SGP: 8.61 | VAR: 5.51","Jenks":"8","Tier":3},{"Player":"Fernando Tatis Jr. (SD - RF)","POS":"OF","POSRANK":6,"Total_SGP":16.377,"RSGP":5.0005,"HRSGP":3.4633,"RBISGP":4.3853,"SBSGP":2.2545,"OBPSGP":1.2734,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":97,"HR":28,"RBI":81,"SB":25,"OBP":0.35,"AB":566,"H":153,"BB":71,"Repl_SGP":11.2129,"VAR":5.1641,"OverallRank":14,"label":"Fernando Tatis Jr. (SD - RF) (OF) SGP: 16.38 | VAR: 5.16","Jenks":"8","Tier":3},{"Player":"Corbin Carroll (ARI - CF,RF)","POS":"OF","POSRANK":7,"Total_SGP":16.1308,"RSGP":5.0521,"HRSGP":3.0922,"RBISGP":4.3853,"SBSGP":2.976,"OBPSGP":0.6253,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":98,"HR":25,"RBI":81,"SB":33,"OBP":0.339,"AB":538,"H":140,"BB":65,"Repl_SGP":11.2129,"VAR":4.9179,"OverallRank":15,"label":"Corbin Carroll (ARI - CF,RF) (OF) SGP: 16.13 | VAR: 4.92","Jenks":"8","Tier":3},{"Player":"Vladimir Guerrero Jr. (TOR - 1B,DH)","POS":"1B","POSRANK":1,"Total_SGP":16.8303,"RSGP":4.8459,"HRSGP":3.7106,"RBISGP":5.2516,"SBSGP":0.4509,"OBPSGP":2.5714,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":94,"HR":30,"RBI":97,"SB":5,"OBP":0.375,"AB":579,"H":171,"BB":74,"Repl_SGP":11.9166,"VAR":4.9137,"OverallRank":16,"label":"Vladimir Guerrero Jr. (TOR - 1B,DH) (1B) SGP: 16.83 | VAR: 4.91","Jenks":"8","Tier":3},{"Player":"Logan Gilbert (SEA - SP)","POS":"SP","POSRANK":8,"Total_SGP":7.8936,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.4194,"QSSGP":2.1633,"SVSGP":0,"ERASGP":0.9902,"WHIPSGP":2.3207,"K":185,"QS":16,"SV":0,"IP":165.4,"ER":62,"ERA":3.38,"WHIP":1.06,"Hits":136,"Walks":39,"Repl_SGP":3.1019,"VAR":4.7917,"OverallRank":17,"label":"Logan Gilbert (SEA - SP) (SP) SGP: 7.89 | VAR: 4.79","Jenks":"8","Tier":3},{"Player":"Cristopher Sanchez (PHI - SP)","POS":"SP","POSRANK":6,"Total_SGP":7.8713,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.4586,"QSSGP":2.569,"SVSGP":0,"ERASGP":1.6221,"WHIPSGP":1.2216,"K":188,"QS":19,"SV":0,"IP":191.7,"ER":68,"ERA":3.19,"WHIP":1.14,"Hits":172,"Walks":47,"Repl_SGP":3.1019,"VAR":4.7693,"OverallRank":18,"label":"Cristopher Sanchez (PHI - SP) (SP) SGP: 7.87 | VAR: 4.77","Jenks":"8","Tier":3},{"Player":"Junior Caminero (TB - 3B)","POS":"3B","POSRANK":2,"Total_SGP":14.5399,"RSGP":4.2788,"HRSGP":4.5765,"RBISGP":5.6305,"SBSGP":0.5411,"OBPSGP":-0.487,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":83,"HR":37,"RBI":104,"SB":6,"OBP":0.318,"AB":583,"H":156,"BB":43,"Repl_SGP":9.86,"VAR":4.6799,"OverallRank":19,"label":"Junior Caminero (TB - 3B) (3B) SGP: 14.54 | VAR: 4.68","Jenks":"8","Tier":3},{"Player":"Julio Rodriguez (SEA - CF)","POS":"OF","POSRANK":4,"Total_SGP":15.8818,"RSGP":4.8459,"HRSGP":3.7106,"RBISGP":5.0891,"SBSGP":2.4349,"OBPSGP":-0.1987,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":94,"HR":30,"RBI":94,"SB":27,"OBP":0.324,"AB":608,"H":165,"BB":47,"Repl_SGP":11.2129,"VAR":4.6689,"OverallRank":20,"label":"Julio Rodriguez (SEA - CF) (OF) SGP: 15.88 | VAR: 4.67","Jenks":"8","Tier":3},{"Player":"Ketel Marte (ARI - 2B,DH)","POS":"2B","POSRANK":1,"Total_SGP":14.3735,"RSGP":4.5881,"HRSGP":3.3396,"RBISGP":4.5477,"SBSGP":0.4509,"OBPSGP":1.4472,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":89,"HR":27,"RBI":84,"SB":5,"OBP":0.355,"AB":536,"H":148,"BB":67,"Repl_SGP":9.7077,"VAR":4.6658,"OverallRank":21,"label":"Ketel Marte (ARI - 2B,DH) (2B) SGP: 14.37 | VAR: 4.67","Jenks":"8","Tier":3},{"Player":"Chris Sale (ATL - SP)","POS":"SP","POSRANK":10,"Total_SGP":7.6596,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.5501,"QSSGP":2.1633,"SVSGP":0,"ERASGP":1.2883,"WHIPSGP":1.6578,"K":195,"QS":16,"SV":0,"IP":159.4,"ER":57,"ERA":3.23,"WHIP":1.1,"Hits":132,"Walks":43,"Repl_SGP":3.1019,"VAR":4.5577,"OverallRank":22,"label":"Chris Sale (ATL - SP) (SP) SGP: 7.66 | VAR: 4.56","Jenks":"8","Tier":3},{"Player":"Mason Miller (SD - RP)","POS":"RP","POSRANK":1,"Total_SGP":7.5138,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.3208,"QSSGP":0,"SVSGP":3.7431,"ERASGP":1.1708,"WHIPSGP":1.279,"K":101,"QS":0,"SV":33,"IP":65.3,"ER":18,"ERA":2.51,"WHIP":0.99,"Hits":40,"Walks":25,"Repl_SGP":3.2506,"VAR":4.2632,"OverallRank":23,"label":"Mason Miller (SD - RP) (RP) SGP: 7.51 | VAR: 4.26","Jenks":"8","Tier":3},{"Player":"Elly De La Cruz (CIN - SS)","POS":"SS","POSRANK":3,"Total_SGP":16.2703,"RSGP":4.8459,"HRSGP":2.9685,"RBISGP":4.4395,"SBSGP":3.6974,"OBPSGP":0.3191,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":94,"HR":24,"RBI":82,"SB":41,"OBP":0.333,"AB":585,"H":153,"BB":63,"Repl_SGP":12.0377,"VAR":4.2326,"OverallRank":24,"label":"Elly De La Cruz (CIN - SS) (SS) SGP: 16.27 | VAR: 4.23","Jenks":"8","Tier":3},{"Player":"Jacob deGrom (TEX - SP)","POS":"SP","POSRANK":11,"Total_SGP":7.3315,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.354,"QSSGP":2.0281,"SVSGP":0,"ERASGP":0.7341,"WHIPSGP":2.2153,"K":180,"QS":15,"SV":0,"IP":162.8,"ER":63,"ERA":3.48,"WHIP":1.06,"Hits":134,"Walks":39,"Repl_SGP":3.1019,"VAR":4.2296,"OverallRank":25,"label":"Jacob deGrom (TEX - SP) (SP) SGP: 7.33 | VAR: 4.23","Jenks":"8","Tier":3},{"Player":"Jazz Chisholm Jr. (NYY - 2B,3B)","POS":"2B","POSRANK":2,"Total_SGP":13.9362,"RSGP":4.021,"HRSGP":3.4633,"RBISGP":4.2229,"SBSGP":2.7956,"OBPSGP":-0.5666,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":78,"HR":28,"RBI":78,"SB":31,"OBP":0.314,"AB":518,"H":125,"BB":56,"Repl_SGP":9.7077,"VAR":4.2285,"OverallRank":26,"label":"Jazz Chisholm Jr. (NYY - 2B,3B) (2B) SGP: 13.94 | VAR: 4.23","Jenks":"8","Tier":3},{"Player":"Gunnar Henderson (BAL - SS)","POS":"SS","POSRANK":2,"Total_SGP":16.2642,"RSGP":5.0521,"HRSGP":3.3396,"RBISGP":4.7102,"SBSGP":2.0741,"OBPSGP":1.0882,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":98,"HR":27,"RBI":87,"SB":23,"OBP":0.347,"AB":583,"H":159,"BB":67,"Repl_SGP":12.0377,"VAR":4.2264,"OverallRank":27,"label":"Gunnar Henderson (BAL - SS) (SS) SGP: 16.26 | VAR: 4.23","Jenks":"8","Tier":3},{"Player":"Logan Webb (SF - SP)","POS":"SP","POSRANK":7,"Total_SGP":7.2149,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.4586,"QSSGP":2.569,"SVSGP":0,"ERASGP":1.4299,"WHIPSGP":0.7575,"K":188,"QS":19,"SV":0,"IP":197.4,"ER":72,"ERA":3.28,"WHIP":1.17,"Hits":186,"Walks":45,"Repl_SGP":3.1019,"VAR":4.113,"OverallRank":28,"label":"Logan Webb (SF - SP) (SP) SGP: 7.21 | VAR: 4.11","Jenks":"8","Tier":3},{"Player":"Yordan Alvarez (HOU - LF,DH)","POS":"OF","POSRANK":11,"Total_SGP":15.1609,"RSGP":4.1241,"HRSGP":3.7106,"RBISGP":4.6019,"SBSGP":0.2705,"OBPSGP":2.4537,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":80,"HR":30,"RBI":85,"SB":3,"OBP":0.383,"AB":472,"H":138,"BB":69,"Repl_SGP":11.2129,"VAR":3.948,"OverallRank":29,"label":"Yordan Alvarez (HOU - LF,DH) (OF) SGP: 15.16 | VAR: 3.95","Jenks":"8","Tier":3},{"Player":"Yoshinobu Yamamoto (LAD - SP)","POS":"SP","POSRANK":12,"Total_SGP":7.0229,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.2755,"QSSGP":2.1633,"SVSGP":0,"ERASGP":1.177,"WHIPSGP":1.4071,"K":174,"QS":16,"SV":0,"IP":159.6,"ER":58,"ERA":3.27,"WHIP":1.11,"Hits":130,"Walks":48,"Repl_SGP":3.1019,"VAR":3.921,"OverallRank":30,"label":"Yoshinobu Yamamoto (LAD - SP) (SP) SGP: 7.02 | VAR: 3.92","Jenks":"8","Tier":3},{"Player":"Zack Wheeler (PHI - SP)","POS":"SP","POSRANK":19,"Total_SGP":6.8322,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.1055,"QSSGP":1.8929,"SVSGP":0,"ERASGP":1.0827,"WHIPSGP":1.7511,"K":161,"QS":14,"SV":0,"IP":141.3,"ER":51,"ERA":3.28,"WHIP":1.08,"Hits":115,"Walks":37,"Repl_SGP":3.1019,"VAR":3.7303,"OverallRank":31,"label":"Zack Wheeler (PHI - SP) (SP) SGP: 6.83 | VAR: 3.73","Jenks":"7","Tier":4},{"Player":"Nick Kurtz (ATH - 1B)","POS":"1B","POSRANK":2,"Total_SGP":15.5989,"RSGP":4.6912,"HRSGP":4.5765,"RBISGP":5.0891,"SBSGP":0.2705,"OBPSGP":0.9716,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":91,"HR":37,"RBI":94,"SB":3,"OBP":0.347,"AB":515,"H":134,"BB":69,"Repl_SGP":11.9166,"VAR":3.6823,"OverallRank":32,"label":"Nick Kurtz (ATH - 1B) (1B) SGP: 15.6 | VAR: 3.68","Jenks":"7","Tier":4},{"Player":"Edwin Diaz (LAD - RP)","POS":"RP","POSRANK":2,"Total_SGP":6.9307,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.177,"QSSGP":0,"SVSGP":4.1968,"ERASGP":0.6721,"WHIPSGP":0.8848,"K":90,"QS":0,"SV":37,"IP":65,"ER":22,"ERA":3.02,"WHIP":1.06,"Hits":47,"Walks":22,"Repl_SGP":3.2506,"VAR":3.6801,"OverallRank":33,"label":"Edwin Diaz (LAD - RP) (RP) SGP: 6.93 | VAR: 3.68","Jenks":"7","Tier":4},{"Player":"Max Fried (NYY - SP)","POS":"SP","POSRANK":9,"Total_SGP":6.7033,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.2624,"QSSGP":2.4338,"SVSGP":0,"ERASGP":1.2925,"WHIPSGP":0.7146,"K":173,"QS":18,"SV":0,"IP":183,"ER":67,"ERA":3.31,"WHIP":1.17,"Hits":160,"Walks":54,"Repl_SGP":3.1019,"VAR":3.6013,"OverallRank":34,"label":"Max Fried (NYY - SP) (SP) SGP: 6.7 | VAR: 3.6","Jenks":"7","Tier":4},{"Player":"Brent Rooker (ATH - LF,RF,DH)","POS":"OF","POSRANK":10,"Total_SGP":14.7262,"RSGP":4.485,"HRSGP":4.0817,"RBISGP":5.2516,"SBSGP":0.5411,"OBPSGP":0.3669,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":87,"HR":33,"RBI":97,"SB":6,"OBP":0.335,"AB":573,"H":151,"BB":61,"Repl_SGP":11.2129,"VAR":3.5133,"OverallRank":35,"label":"Brent Rooker (ATH - LF,RF,DH) (OF) SGP: 14.73 | VAR: 3.51","Jenks":"7","Tier":4},{"Player":"George Kirby (SEA - SP)","POS":"SP","POSRANK":14,"Total_SGP":6.5913,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.197,"QSSGP":2.1633,"SVSGP":0,"ERASGP":0.5544,"WHIPSGP":1.6765,"K":168,"QS":16,"SV":0,"IP":171.1,"ER":68,"ERA":3.55,"WHIP":1.11,"Hits":156,"Walks":33,"Repl_SGP":3.1019,"VAR":3.4894,"OverallRank":36,"label":"George Kirby (SEA - SP) (SP) SGP: 6.59 | VAR: 3.49","Jenks":"7","Tier":4},{"Player":"Hunter Brown (HOU - SP)","POS":"SP","POSRANK":13,"Total_SGP":6.4715,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.5371,"QSSGP":2.4338,"SVSGP":0,"ERASGP":0.8776,"WHIPSGP":0.6231,"K":194,"QS":18,"SV":0,"IP":179.7,"ER":69,"ERA":3.44,"WHIP":1.18,"Hits":152,"Walks":59,"Repl_SGP":3.1019,"VAR":3.3696,"OverallRank":37,"label":"Hunter Brown (HOU - SP) (SP) SGP: 6.47 | VAR: 3.37","Jenks":"7","Tier":4},{"Player":"Cole Ragans (KC - SP)","POS":"SP","POSRANK":15,"Total_SGP":6.3372,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.5371,"QSSGP":2.0281,"SVSGP":0,"ERASGP":0.8642,"WHIPSGP":0.9078,"K":194,"QS":15,"SV":0,"IP":155.9,"ER":59,"ERA":3.38,"WHIP":1.15,"Hits":124,"Walks":55,"Repl_SGP":3.1019,"VAR":3.2353,"OverallRank":38,"label":"Cole Ragans (KC - SP) (SP) SGP: 6.34 | VAR: 3.24","Jenks":"7","Tier":4},{"Player":"James Wood (WSH - LF,DH)","POS":"OF","POSRANK":13,"Total_SGP":14.4242,"RSGP":4.2788,"HRSGP":3.2159,"RBISGP":4.4395,"SBSGP":1.4429,"OBPSGP":1.0472,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":83,"HR":26,"RBI":82,"SB":16,"OBP":0.348,"AB":550,"H":143,"BB":74,"Repl_SGP":11.2129,"VAR":3.2113,"OverallRank":39,"label":"James Wood (WSH - LF,DH) (OF) SGP: 14.42 | VAR: 3.21","Jenks":"7","Tier":4},{"Player":"Cade Smith (CLE - RP)","POS":"RP","POSRANK":3,"Total_SGP":6.4287,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.1639,"QSSGP":0,"SVSGP":3.5163,"ERASGP":0.8772,"WHIPSGP":0.8713,"K":89,"QS":0,"SV":31,"IP":69,"ER":22,"ERA":2.88,"WHIP":1.07,"Hits":53,"Walks":21,"Repl_SGP":3.2506,"VAR":3.1781,"OverallRank":40,"label":"Cade Smith (CLE - RP) (RP) SGP: 6.43 | VAR: 3.18","Jenks":"7","Tier":4},{"Player":"William Contreras (MIL - C,DH)","POS":"C","POSRANK":2,"Total_SGP":12.3606,"RSGP":4.021,"HRSGP":2.3501,"RBISGP":4.1688,"SBSGP":0.5411,"OBPSGP":1.2796,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":78,"HR":19,"RBI":77,"SB":6,"OBP":0.354,"AB":527,"H":141,"BB":70,"Repl_SGP":9.228,"VAR":3.1326,"OverallRank":41,"label":"William Contreras (MIL - C,DH) (C) SGP: 12.36 | VAR: 3.13","Jenks":"7","Tier":4},{"Player":"Bryce Harper (PHI - 1B)","POS":"1B","POSRANK":5,"Total_SGP":15.038,"RSGP":4.2788,"HRSGP":3.3396,"RBISGP":4.7102,"SBSGP":0.9018,"OBPSGP":1.8077,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":83,"HR":27,"RBI":87,"SB":10,"OBP":0.362,"AB":535,"H":146,"BB":76,"Repl_SGP":11.9166,"VAR":3.1214,"OverallRank":42,"label":"Bryce Harper (PHI - 1B) (1B) SGP: 15.04 | VAR: 3.12","Jenks":"7","Tier":4},{"Player":"Joe Ryan (MIN - SP)","POS":"SP","POSRANK":18,"Total_SGP":6.1644,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.4194,"QSSGP":2.0281,"SVSGP":0,"ERASGP":0.0547,"WHIPSGP":1.6622,"K":185,"QS":15,"SV":0,"IP":168.5,"ER":71,"ERA":3.8,"WHIP":1.1,"Hits":146,"Walks":40,"Repl_SGP":3.1019,"VAR":3.0625,"OverallRank":43,"label":"Joe Ryan (MIN - SP) (SP) SGP: 6.16 | VAR: 3.06","Jenks":"7","Tier":4},{"Player":"Wyatt Langford (TEX - LF,CF)","POS":"OF","POSRANK":14,"Total_SGP":14.133,"RSGP":4.3303,"HRSGP":2.9685,"RBISGP":4.0605,"SBSGP":1.984,"OBPSGP":0.7897,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":84,"HR":24,"RBI":75,"SB":22,"OBP":0.342,"AB":532,"H":136,"BB":71,"Repl_SGP":11.2129,"VAR":2.9201,"OverallRank":44,"label":"Wyatt Langford (TEX - LF,CF) (OF) SGP: 14.13 | VAR: 2.92","Jenks":"7","Tier":4},{"Player":"Manny Machado (SD - 3B)","POS":"3B","POSRANK":4,"Total_SGP":12.7617,"RSGP":4.0726,"HRSGP":3.2159,"RBISGP":4.7643,"SBSGP":0.8116,"OBPSGP":-0.1027,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":79,"HR":26,"RBI":88,"SB":9,"OBP":0.324,"AB":575,"H":152,"BB":52,"Repl_SGP":9.86,"VAR":2.9017,"OverallRank":45,"label":"Manny Machado (SD - 3B) (3B) SGP: 12.76 | VAR: 2.9","Jenks":"7","Tier":4},{"Player":"Andres Munoz (SEA - RP)","POS":"RP","POSRANK":5,"Total_SGP":6.0173,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.0331,"QSSGP":0,"SVSGP":3.6297,"ERASGP":0.8009,"WHIPSGP":0.5535,"K":79,"QS":0,"SV":32,"IP":62.8,"ER":20,"ERA":2.91,"WHIP":1.12,"Hits":45,"Walks":25,"Repl_SGP":3.2506,"VAR":2.7667,"OverallRank":46,"label":"Andres Munoz (SEA - RP) (RP) SGP: 6.02 | VAR: 2.77","Jenks":"7","Tier":4},{"Player":"Jhoan Duran (PHI - RP)","POS":"RP","POSRANK":4,"Total_SGP":6.0136,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.007,"QSSGP":0,"SVSGP":3.6297,"ERASGP":0.8698,"WHIPSGP":0.5071,"K":77,"QS":0,"SV":32,"IP":66.5,"ER":21,"ERA":2.88,"WHIP":1.12,"Hits":54,"Walks":21,"Repl_SGP":3.2506,"VAR":2.763,"OverallRank":47,"label":"Jhoan Duran (PHI - RP) (RP) SGP: 6.01 | VAR: 2.76","Jenks":"7","Tier":4},{"Player":"Jesus Luzardo (PHI - SP)","POS":"SP","POSRANK":17,"Total_SGP":5.7864,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.5763,"QSSGP":2.2986,"SVSGP":0,"ERASGP":0.3825,"WHIPSGP":0.529,"K":197,"QS":17,"SV":0,"IP":177.2,"ER":72,"ERA":3.66,"WHIP":1.18,"Hits":154,"Walks":55,"Repl_SGP":3.1019,"VAR":2.6845,"OverallRank":48,"label":"Jesus Luzardo (PHI - SP) (SP) SGP: 5.79 | VAR: 2.68","Jenks":"7","Tier":4},{"Player":"Rafael Devers (SF - 1B,DH)","POS":"1B","POSRANK":6,"Total_SGP":14.5751,"RSGP":4.5881,"HRSGP":3.7106,"RBISGP":4.9809,"SBSGP":0.1804,"OBPSGP":1.1151,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":89,"HR":30,"RBI":92,"SB":2,"OBP":0.347,"AB":567,"H":144,"BB":82,"Repl_SGP":11.9166,"VAR":2.6585,"OverallRank":49,"label":"Rafael Devers (SF - 1B,DH) (1B) SGP: 14.58 | VAR: 2.66","Jenks":"7","Tier":4},{"Player":"Brice Turang (MIL - 2B)","POS":"2B","POSRANK":4,"Total_SGP":12.3097,"RSGP":4.1757,"HRSGP":1.8553,"RBISGP":3.5732,"SBSGP":2.6152,"OBPSGP":0.0902,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":81,"HR":15,"RBI":66,"SB":29,"OBP":0.328,"AB":570,"H":148,"BB":59,"Repl_SGP":9.7077,"VAR":2.602,"OverallRank":50,"label":"Brice Turang (MIL - 2B) (2B) SGP: 12.31 | VAR: 2.6","Jenks":"6","Tier":5},{"Player":"Pete Alonso (BAL - 1B)","POS":"1B","POSRANK":3,"Total_SGP":14.4679,"RSGP":4.3819,"HRSGP":4.4528,"RBISGP":5.6305,"SBSGP":0.1804,"OBPSGP":-0.1776,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":85,"HR":36,"RBI":104,"SB":2,"OBP":0.325,"AB":582,"H":148,"BB":60,"Repl_SGP":11.9166,"VAR":2.5514,"OverallRank":51,"label":"Pete Alonso (BAL - 1B) (1B) SGP: 14.47 | VAR: 2.55","Jenks":"6","Tier":5},{"Player":"Nathan Eovaldi (TEX - SP)","POS":"SP","POSRANK":20,"Total_SGP":5.6015,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.0401,"QSSGP":2.0281,"SVSGP":0,"ERASGP":0.4649,"WHIPSGP":1.0684,"K":156,"QS":15,"SV":0,"IP":162.3,"ER":65,"ERA":3.62,"WHIP":1.14,"Hits":144,"Walks":41,"Repl_SGP":3.1019,"VAR":2.4996,"OverallRank":52,"label":"Nathan Eovaldi (TEX - SP) (SP) SGP: 5.6 | VAR: 2.5","Jenks":"6","Tier":5},{"Player":"Jackson Chourio (MIL - LF,CF,RF)","POS":"OF","POSRANK":9,"Total_SGP":13.7018,"RSGP":4.5366,"HRSGP":2.9685,"RBISGP":4.5477,"SBSGP":2.1643,"OBPSGP":-0.5153,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":88,"HR":24,"RBI":84,"SB":24,"OBP":0.316,"AB":584,"H":158,"BB":40,"Repl_SGP":11.2129,"VAR":2.4889,"OverallRank":53,"label":"Jackson Chourio (MIL - LF,CF,RF) (OF) SGP: 13.7 | VAR: 2.49","Jenks":"6","Tier":5},{"Player":"David Bednar (NYY - RP)","POS":"RP","POSRANK":7,"Total_SGP":5.7129,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.9939,"QSSGP":0,"SVSGP":3.7431,"ERASGP":0.4334,"WHIPSGP":0.5426,"K":76,"QS":0,"SV":33,"IP":62.7,"ER":23,"ERA":3.25,"WHIP":1.12,"Hits":49,"Walks":21,"Repl_SGP":3.2506,"VAR":2.4624,"OverallRank":54,"label":"David Bednar (NYY - RP) (RP) SGP: 5.71 | VAR: 2.46","Jenks":"6","Tier":5},{"Player":"Aroldis Chapman (BOS - RP)","POS":"RP","POSRANK":8,"Total_SGP":5.6867,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.0854,"QSSGP":0,"SVSGP":3.5163,"ERASGP":0.6574,"WHIPSGP":0.4275,"K":83,"QS":0,"SV":31,"IP":60,"ER":20,"ERA":3,"WHIP":1.15,"Hits":42,"Walks":26,"Repl_SGP":3.2506,"VAR":2.4361,"OverallRank":55,"label":"Aroldis Chapman (BOS - RP) (RP) SGP: 5.69 | VAR: 2.44","Jenks":"6","Tier":5},{"Player":"Matt Olson (ATL - 1B)","POS":"1B","POSRANK":7,"Total_SGP":14.301,"RSGP":4.5366,"HRSGP":3.7106,"RBISGP":5.0891,"SBSGP":0.0902,"OBPSGP":0.8745,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":88,"HR":30,"RBI":94,"SB":1,"OBP":0.342,"AB":581,"H":147,"BB":80,"Repl_SGP":11.9166,"VAR":2.3844,"OverallRank":56,"label":"Matt Olson (ATL - 1B) (1B) SGP: 14.3 | VAR: 2.38","Jenks":"6","Tier":5},{"Player":"Freddie Freeman (LAD - 1B)","POS":"1B","POSRANK":4,"Total_SGP":14.2761,"RSGP":4.4335,"HRSGP":2.8448,"RBISGP":4.7643,"SBSGP":0.7214,"OBPSGP":1.5121,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":86,"HR":23,"RBI":88,"SB":8,"OBP":0.355,"AB":556,"H":156,"BB":66,"Repl_SGP":11.9166,"VAR":2.3596,"OverallRank":57,"label":"Freddie Freeman (LAD - 1B) (1B) SGP: 14.28 | VAR: 2.36","Jenks":"6","Tier":5},{"Player":"Maikel Garcia (KC - 2B,3B,SS,OF)","POS":"2B","POSRANK":3,"Total_SGP":12.0377,"RSGP":4.2272,"HRSGP":1.6079,"RBISGP":3.5732,"SBSGP":2.3447,"OBPSGP":0.2846,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":82,"HR":13,"RBI":66,"SB":26,"OBP":0.333,"AB":580,"H":157,"BB":54,"Repl_SGP":9.7077,"VAR":2.33,"OverallRank":58,"label":"Maikel Garcia (KC - 2B,3B,SS,OF) (2B) SGP: 12.04 | VAR: 2.33","Jenks":"6","Tier":5},{"Player":"Austin Riley (ATL - 3B)","POS":"3B","POSRANK":5,"Total_SGP":12.1737,"RSGP":4.2272,"HRSGP":3.4633,"RBISGP":4.7643,"SBSGP":0.1804,"OBPSGP":-0.4615,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":82,"HR":28,"RBI":88,"SB":2,"OBP":0.319,"AB":574,"H":150,"BB":48,"Repl_SGP":9.86,"VAR":2.3137,"OverallRank":59,"label":"Austin Riley (ATL - 3B) (3B) SGP: 12.17 | VAR: 2.31","Jenks":"6","Tier":5},{"Player":"Devin Williams (NYM - RP)","POS":"RP","POSRANK":6,"Total_SGP":5.537,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.0985,"QSSGP":0,"SVSGP":3.5163,"ERASGP":0.5849,"WHIPSGP":0.3373,"K":84,"QS":0,"SV":31,"IP":63.3,"ER":22,"ERA":3.09,"WHIP":1.14,"Hits":46,"Walks":27,"Repl_SGP":3.2506,"VAR":2.2864,"OverallRank":60,"label":"Devin Williams (NYM - RP) (RP) SGP: 5.54 | VAR: 2.29","Jenks":"6","Tier":5},{"Player":"Framber Valdez (DET - SP)","POS":"SP","POSRANK":16,"Total_SGP":5.3767,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.3409,"QSSGP":2.4338,"SVSGP":0,"ERASGP":0.8741,"WHIPSGP":-0.272,"K":179,"QS":18,"SV":0,"IP":191.4,"ER":74,"ERA":3.49,"WHIP":1.23,"Hits":171,"Walks":64,"Repl_SGP":3.1019,"VAR":2.2748,"OverallRank":61,"label":"Framber Valdez (DET - SP) (SP) SGP: 5.38 | VAR: 2.27","Jenks":"6","Tier":5},{"Player":"Eugenio Suarez (CIN - 3B)","POS":"3B","POSRANK":7,"Total_SGP":12.1317,"RSGP":3.9179,"HRSGP":4.2054,"RBISGP":5.0891,"SBSGP":0.2705,"OBPSGP":-1.3513,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":76,"HR":34,"RBI":94,"SB":3,"OBP":0.3,"AB":543,"H":127,"BB":51,"Repl_SGP":9.86,"VAR":2.2717,"OverallRank":62,"label":"Eugenio Suarez (CIN - 3B) (3B) SGP: 12.13 | VAR: 2.27","Jenks":"6","Tier":5},{"Player":"Francisco Lindor (NYM - SS)","POS":"SS","POSRANK":5,"Total_SGP":14.214,"RSGP":4.7943,"HRSGP":3.0922,"RBISGP":4.2229,"SBSGP":2.0741,"OBPSGP":0.0305,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":93,"HR":25,"RBI":78,"SB":23,"OBP":0.326,"AB":563,"H":147,"BB":56,"Repl_SGP":12.0377,"VAR":2.1763,"OverallRank":63,"label":"Francisco Lindor (NYM - SS) (SS) SGP: 14.21 | VAR: 2.18","Jenks":"6","Tier":5},{"Player":"Matt Chapman (SF - 3B)","POS":"3B","POSRANK":9,"Total_SGP":11.9885,"RSGP":4.1241,"HRSGP":2.9685,"RBISGP":4.1688,"SBSGP":0.8116,"OBPSGP":-0.0846,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":80,"HR":24,"RBI":77,"SB":9,"OBP":0.326,"AB":538,"H":128,"BB":70,"Repl_SGP":9.86,"VAR":2.1285,"OverallRank":64,"label":"Matt Chapman (SF - 3B) (3B) SGP: 11.99 | VAR: 2.13","Jenks":"6","Tier":5},{"Player":"Munetaka Murakami (CWS - 1B,3B)","POS":"3B","POSRANK":10,"Total_SGP":11.9166,"RSGP":3.6086,"HRSGP":3.4633,"RBISGP":4.0605,"SBSGP":0.8116,"OBPSGP":-0.0274,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":70,"HR":28,"RBI":75,"SB":9,"OBP":0.326,"AB":482,"H":107,"BB":75,"Repl_SGP":9.86,"VAR":2.0566,"OverallRank":65,"label":"Munetaka Murakami (CWS - 1B,3B) (3B) SGP: 11.92 | VAR: 2.06","Jenks":"6","Tier":5},{"Player":"Brandon Woodruff (MIL - SP)","POS":"SP","POSRANK":27,"Total_SGP":5.112,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.0401,"QSSGP":1.8929,"SVSGP":0,"ERASGP":0.1619,"WHIPSGP":1.0171,"K":156,"QS":14,"SV":0,"IP":147,"ER":61,"ERA":3.76,"WHIP":1.13,"Hits":127,"Walks":40,"Repl_SGP":3.1019,"VAR":2.0101,"OverallRank":66,"label":"Brandon Woodruff (MIL - SP) (SP) SGP: 5.11 | VAR: 2.01","Jenks":"6","Tier":5},{"Player":"Nick Pivetta (SD - SP)","POS":"SP","POSRANK":24,"Total_SGP":5.0409,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.3932,"QSSGP":2.0281,"SVSGP":0,"ERASGP":-0.2538,"WHIPSGP":0.8734,"K":183,"QS":15,"SV":0,"IP":169.6,"ER":74,"ERA":3.91,"WHIP":1.16,"Hits":145,"Walks":51,"Repl_SGP":3.1019,"VAR":1.939,"OverallRank":67,"label":"Nick Pivetta (SD - SP) (SP) SGP: 5.04 | VAR: 1.94","Jenks":"6","Tier":5},{"Player":"Sonny Gray (BOS - SP)","POS":"SP","POSRANK":23,"Total_SGP":4.9907,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.354,"QSSGP":2.1633,"SVSGP":0,"ERASGP":0.2097,"WHIPSGP":0.2637,"K":180,"QS":16,"SV":0,"IP":171.5,"ER":71,"ERA":3.74,"WHIP":1.2,"Hits":160,"Walks":45,"Repl_SGP":3.1019,"VAR":1.8888,"OverallRank":68,"label":"Sonny Gray (BOS - SP) (SP) SGP: 4.99 | VAR: 1.89","Jenks":"6","Tier":5},{"Player":"Dylan Cease (TOR - SP)","POS":"SP","POSRANK":21,"Total_SGP":4.9813,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.6155,"QSSGP":2.1633,"SVSGP":0,"ERASGP":0.2643,"WHIPSGP":-0.0619,"K":200,"QS":16,"SV":0,"IP":170.2,"ER":70,"ERA":3.69,"WHIP":1.22,"Hits":142,"Walks":65,"Repl_SGP":3.1019,"VAR":1.8793,"OverallRank":69,"label":"Dylan Cease (TOR - SP) (SP) SGP: 4.98 | VAR: 1.88","Jenks":"6","Tier":5},{"Player":"Josh Hader (HOU - RP) IL15","POS":"RP","POSRANK":10,"Total_SGP":5.1214,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.9808,"QSSGP":0,"SVSGP":3.0626,"ERASGP":0.3961,"WHIPSGP":0.6819,"K":75,"QS":0,"SV":27,"IP":54.9,"ER":20,"ERA":3.2,"WHIP":1.07,"Hits":38,"Walks":21,"Repl_SGP":3.2506,"VAR":1.8708,"OverallRank":70,"label":"Josh Hader (HOU - RP) IL15 (RP) SGP: 5.12 | VAR: 1.87","Jenks":"6","Tier":5},{"Player":"Ben Rice (NYY - C,1B,DH)","POS":"C","POSRANK":6,"Total_SGP":11.0322,"RSGP":3.6602,"HRSGP":3.2159,"RBISGP":3.9522,"SBSGP":0.3607,"OBPSGP":-0.1568,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":71,"HR":26,"RBI":73,"SB":4,"OBP":0.323,"AB":463,"H":114,"BB":53,"Repl_SGP":9.228,"VAR":1.8041,"OverallRank":71,"label":"Ben Rice (NYY - C,1B,DH) (C) SGP: 11.03 | VAR: 1.8","Jenks":"6","Tier":5},{"Player":"Shea Langeliers (ATH - C)","POS":"C","POSRANK":4,"Total_SGP":11.0156,"RSGP":3.5571,"HRSGP":3.4633,"RBISGP":4.2229,"SBSGP":0.4509,"OBPSGP":-0.6786,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":69,"HR":28,"RBI":78,"SB":5,"OBP":0.31,"AB":472,"H":120,"BB":39,"Repl_SGP":9.228,"VAR":1.7876,"OverallRank":72,"label":"Shea Langeliers (ATH - C) (C) SGP: 11.02 | VAR: 1.79","Jenks":"6","Tier":5},{"Player":"Roman Anthony (BOS - LF,CF,RF)","POS":"OF","POSRANK":25,"Total_SGP":12.9927,"RSGP":4.3819,"HRSGP":2.2264,"RBISGP":3.6815,"SBSGP":0.9018,"OBPSGP":1.8011,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":85,"HR":18,"RBI":68,"SB":10,"OBP":0.363,"AB":521,"H":140,"BB":78,"Repl_SGP":11.2129,"VAR":1.7798,"OverallRank":73,"label":"Roman Anthony (BOS - LF,CF,RF) (OF) SGP: 12.99 | VAR: 1.78","Jenks":"6","Tier":5},{"Player":"Ivan Herrera (STL - C,DH)","POS":"C","POSRANK":7,"Total_SGP":10.981,"RSGP":3.454,"HRSGP":2.2264,"RBISGP":3.6274,"SBSGP":0.8116,"OBPSGP":0.8617,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":67,"HR":18,"RBI":67,"SB":9,"OBP":0.348,"AB":474,"H":128,"BB":56,"Repl_SGP":9.228,"VAR":1.753,"OverallRank":74,"label":"Ivan Herrera (STL - C,DH) (C) SGP: 10.98 | VAR: 1.75","Jenks":"6","Tier":5},{"Player":"Alex Bregman (CHC - 3B)","POS":"3B","POSRANK":8,"Total_SGP":11.6104,"RSGP":4.1757,"HRSGP":2.7211,"RBISGP":4.277,"SBSGP":0.1804,"OBPSGP":0.2562,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":81,"HR":22,"RBI":79,"SB":2,"OBP":0.332,"AB":565,"H":143,"BB":67,"Repl_SGP":9.86,"VAR":1.7504,"OverallRank":75,"label":"Alex Bregman (CHC - 3B) (3B) SGP: 11.61 | VAR: 1.75","Jenks":"6","Tier":5},{"Player":"Gleyber Torres (DET - 2B)","POS":"2B","POSRANK":8,"Total_SGP":11.4346,"RSGP":4.0726,"HRSGP":2.2264,"RBISGP":3.7356,"SBSGP":0.5411,"OBPSGP":0.8589,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":79,"HR":18,"RBI":69,"SB":6,"OBP":0.343,"AB":559,"H":145,"BB":72,"Repl_SGP":9.7077,"VAR":1.7269,"OverallRank":76,"label":"Gleyber Torres (DET - 2B) (2B) SGP: 11.43 | VAR: 1.73","Jenks":"6","Tier":5},{"Player":"Mookie Betts (LAD - SS)","POS":"SS","POSRANK":7,"Total_SGP":13.7635,"RSGP":4.6397,"HRSGP":2.7211,"RBISGP":4.4395,"SBSGP":0.8116,"OBPSGP":1.1516,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":90,"HR":22,"RBI":82,"SB":9,"OBP":0.349,"AB":547,"H":148,"BB":67,"Repl_SGP":12.0377,"VAR":1.7257,"OverallRank":77,"label":"Mookie Betts (LAD - SS) (SS) SGP: 13.76 | VAR: 1.73","Jenks":"6","Tier":5},{"Player":"Freddy Peralta (NYM - SP)","POS":"SP","POSRANK":22,"Total_SGP":4.7871,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.3932,"QSSGP":2.0281,"SVSGP":0,"ERASGP":0.1381,"WHIPSGP":0.2277,"K":183,"QS":15,"SV":0,"IP":165.4,"ER":69,"ERA":3.78,"WHIP":1.2,"Hits":137,"Walks":61,"Repl_SGP":3.1019,"VAR":1.6852,"OverallRank":78,"label":"Freddy Peralta (NYM - SP) (SP) SGP: 4.79 | VAR: 1.69","Jenks":"6","Tier":5},{"Player":"Drew Rasmussen (TB - SP)","POS":"SP","POSRANK":29,"Total_SGP":4.7518,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.8178,"QSSGP":1.8929,"SVSGP":0,"ERASGP":0.4116,"WHIPSGP":0.6295,"K":139,"QS":14,"SV":0,"IP":154.2,"ER":62,"ERA":3.64,"WHIP":1.17,"Hits":139,"Walks":41,"Repl_SGP":3.1019,"VAR":1.6499,"OverallRank":79,"label":"Drew Rasmussen (TB - SP) (SP) SGP: 4.75 | VAR: 1.65","Jenks":"6","Tier":5},{"Player":"George Springer (TOR - LF,CF,RF,DH)","POS":"OF","POSRANK":16,"Total_SGP":12.8541,"RSGP":4.2788,"HRSGP":2.9685,"RBISGP":3.9522,"SBSGP":1.2625,"OBPSGP":0.392,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":83,"HR":24,"RBI":73,"SB":14,"OBP":0.335,"AB":516,"H":134,"BB":59,"Repl_SGP":11.2129,"VAR":1.6412,"OverallRank":80,"label":"George Springer (TOR - LF,CF,RF,DH) (OF) SGP: 12.85 | VAR: 1.64","Jenks":"6","Tier":5},{"Player":"Pete Crow-Armstrong (CHC - CF)","POS":"OF","POSRANK":12,"Total_SGP":12.8491,"RSGP":4.2788,"HRSGP":2.9685,"RBISGP":4.3853,"SBSGP":2.976,"OBPSGP":-1.7595,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":83,"HR":24,"RBI":81,"SB":33,"OBP":0.292,"AB":566,"H":141,"BB":34,"Repl_SGP":11.2129,"VAR":1.6362,"OverallRank":81,"label":"Pete Crow-Armstrong (CHC - CF) (OF) SGP: 12.85 | VAR: 1.64","Jenks":"6","Tier":5},{"Player":"Riley Greene (DET - LF,CF,RF,DH)","POS":"OF","POSRANK":15,"Total_SGP":12.8208,"RSGP":4.1757,"HRSGP":3.4633,"RBISGP":4.9267,"SBSGP":0.3607,"OBPSGP":-0.1056,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":81,"HR":28,"RBI":91,"SB":4,"OBP":0.326,"AB":565,"H":146,"BB":56,"Repl_SGP":11.2129,"VAR":1.6079,"OverallRank":82,"label":"Riley Greene (DET - LF,CF,RF,DH) (OF) SGP: 12.82 | VAR: 1.61","Jenks":"6","Tier":5},{"Player":"Jose Altuve (HOU - 2B,LF,DH)","POS":"2B","POSRANK":5,"Total_SGP":11.3076,"RSGP":4.021,"HRSGP":2.4738,"RBISGP":3.7898,"SBSGP":1.0822,"OBPSGP":-0.0591,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":78,"HR":20,"RBI":70,"SB":12,"OBP":0.325,"AB":553,"H":146,"BB":51,"Repl_SGP":9.7077,"VAR":1.5999,"OverallRank":83,"label":"Jose Altuve (HOU - 2B,LF,DH) (2B) SGP: 11.31 | VAR: 1.6","Jenks":"6","Tier":5},{"Player":"Kyle Bradish (BAL - SP)","POS":"SP","POSRANK":33,"Total_SGP":4.5384,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9486,"QSSGP":1.7577,"SVSGP":0,"ERASGP":0.432,"WHIPSGP":0.4001,"K":149,"QS":13,"SV":0,"IP":138.1,"ER":55,"ERA":3.59,"WHIP":1.18,"Hits":119,"Walks":44,"Repl_SGP":3.1019,"VAR":1.4365,"OverallRank":84,"label":"Kyle Bradish (BAL - SP) (SP) SGP: 4.54 | VAR: 1.44","Jenks":"5","Tier":6},{"Player":"Luis Castillo (SEA - SP)","POS":"SP","POSRANK":26,"Total_SGP":4.5282,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.184,"QSSGP":2.1633,"SVSGP":0,"ERASGP":-0.1494,"WHIPSGP":0.3303,"K":167,"QS":16,"SV":0,"IP":178.7,"ER":77,"ERA":3.88,"WHIP":1.19,"Hits":162,"Walks":51,"Repl_SGP":3.1019,"VAR":1.4263,"OverallRank":85,"label":"Luis Castillo (SEA - SP) (SP) SGP: 4.53 | VAR: 1.43","Jenks":"5","Tier":6},{"Player":"Blake Snell (LAD - SP)","POS":"SP","POSRANK":31,"Total_SGP":4.5153,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.1186,"QSSGP":1.7577,"SVSGP":0,"ERASGP":0.668,"WHIPSGP":-0.029,"K":162,"QS":13,"SV":0,"IP":130.9,"ER":50,"ERA":3.45,"WHIP":1.22,"Hits":102,"Walks":57,"Repl_SGP":3.1019,"VAR":1.4133,"OverallRank":86,"label":"Blake Snell (LAD - SP) (SP) SGP: 4.52 | VAR: 1.41","Jenks":"5","Tier":6},{"Player":"Randy Arozarena (SEA - LF,CF)","POS":"OF","POSRANK":22,"Total_SGP":12.6152,"RSGP":4.3303,"HRSGP":2.8448,"RBISGP":4.0605,"SBSGP":2.1643,"OBPSGP":-0.7848,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":84,"HR":23,"RBI":75,"SB":24,"OBP":0.312,"AB":569,"H":133,"BB":65,"Repl_SGP":11.2129,"VAR":1.4023,"OverallRank":87,"label":"Randy Arozarena (SEA - LF,CF) (OF) SGP: 12.62 | VAR: 1.4","Jenks":"5","Tier":6},{"Player":"Raisel Iglesias (ATL - RP)","POS":"RP","POSRANK":14,"Total_SGP":4.645,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.9024,"QSSGP":0,"SVSGP":3.0626,"ERASGP":0.1785,"WHIPSGP":0.5016,"K":69,"QS":0,"SV":27,"IP":64.8,"ER":26,"ERA":3.62,"WHIP":1.14,"Hits":56,"Walks":17,"Repl_SGP":3.2506,"VAR":1.3944,"OverallRank":88,"label":"Raisel Iglesias (ATL - RP) (RP) SGP: 4.64 | VAR: 1.39","Jenks":"5","Tier":6},{"Player":"Hunter Goodman (COL - C,DH)","POS":"C","POSRANK":3,"Total_SGP":10.5413,"RSGP":3.5055,"HRSGP":3.4633,"RBISGP":4.4936,"SBSGP":0.1804,"OBPSGP":-1.1015,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":68,"HR":28,"RBI":83,"SB":2,"OBP":0.303,"AB":508,"H":130,"BB":34,"Repl_SGP":9.228,"VAR":1.3133,"OverallRank":89,"label":"Hunter Goodman (COL - C,DH) (C) SGP: 10.54 | VAR: 1.31","Jenks":"5","Tier":6},{"Player":"Ryan Helsley (BAL - RP)","POS":"RP","POSRANK":17,"Total_SGP":4.524,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.9285,"QSSGP":0,"SVSGP":3.176,"ERASGP":0.3177,"WHIPSGP":0.1019,"K":71,"QS":0,"SV":28,"IP":62.8,"ER":24,"ERA":3.5,"WHIP":1.21,"Hits":52,"Walks":23,"Repl_SGP":3.2506,"VAR":1.2734,"OverallRank":90,"label":"Ryan Helsley (BAL - RP) (RP) SGP: 4.52 | VAR: 1.27","Jenks":"5","Tier":6},{"Player":"Seiya Suzuki (CHC - LF,RF,DH)","POS":"OF","POSRANK":23,"Total_SGP":12.4815,"RSGP":3.8664,"HRSGP":3.0922,"RBISGP":4.4936,"SBSGP":0.6313,"OBPSGP":0.3981,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":75,"HR":25,"RBI":83,"SB":7,"OBP":0.336,"AB":524,"H":134,"BB":63,"Repl_SGP":11.2129,"VAR":1.2686,"OverallRank":91,"label":"Seiya Suzuki (CHC - LF,RF,DH) (OF) SGP: 12.48 | VAR: 1.27","Jenks":"5","Tier":6},{"Player":"Zach Neto (LAA - SS)","POS":"SS","POSRANK":6,"Total_SGP":13.3043,"RSGP":4.4335,"HRSGP":3.3396,"RBISGP":4.1688,"SBSGP":2.4349,"OBPSGP":-1.0724,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":86,"HR":27,"RBI":77,"SB":27,"OBP":0.306,"AB":562,"H":142,"BB":43,"Repl_SGP":12.0377,"VAR":1.2666,"OverallRank":92,"label":"Zach Neto (LAA - SS) (SS) SGP: 13.3 | VAR: 1.27","Jenks":"5","Tier":6},{"Player":"Trea Turner (PHI - SS)","POS":"SS","POSRANK":4,"Total_SGP":13.2613,"RSGP":4.5881,"HRSGP":2.2264,"RBISGP":3.8439,"SBSGP":2.4349,"OBPSGP":0.168,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":89,"HR":18,"RBI":71,"SB":27,"OBP":0.328,"AB":579,"H":164,"BB":41,"Repl_SGP":12.0377,"VAR":1.2235,"OverallRank":93,"label":"Trea Turner (PHI - SS) (SS) SGP: 13.26 | VAR: 1.22","Jenks":"5","Tier":6},{"Player":"Will Smith (LAD - C)","POS":"C","POSRANK":9,"Total_SGP":10.4454,"RSGP":3.5055,"HRSGP":2.3501,"RBISGP":3.6274,"SBSGP":0.1804,"OBPSGP":0.7821,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":68,"HR":19,"RBI":67,"SB":2,"OBP":0.348,"AB":424,"H":110,"BB":57,"Repl_SGP":9.228,"VAR":1.2174,"OverallRank":94,"label":"Will Smith (LAD - C) (C) SGP: 10.45 | VAR: 1.22","Jenks":"5","Tier":6},{"Player":"Christian Yelich (MIL - LF,DH)","POS":"OF","POSRANK":26,"Total_SGP":12.4297,"RSGP":3.8664,"HRSGP":2.4738,"RBISGP":4.0605,"SBSGP":1.4429,"OBPSGP":0.5862,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":75,"HR":20,"RBI":75,"SB":16,"OBP":0.339,"AB":516,"H":133,"BB":64,"Repl_SGP":11.2129,"VAR":1.2168,"OverallRank":95,"label":"Christian Yelich (MIL - LF,DH) (OF) SGP: 12.43 | VAR: 1.22","Jenks":"5","Tier":6},{"Player":"Tyler Glasnow (LAD - SP)","POS":"SP","POSRANK":36,"Total_SGP":4.3165,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9878,"QSSGP":1.6225,"SVSGP":0,"ERASGP":0.268,"WHIPSGP":0.4382,"K":152,"QS":12,"SV":0,"IP":130.2,"ER":53,"ERA":3.64,"WHIP":1.17,"Hits":105,"Walks":48,"Repl_SGP":3.1019,"VAR":1.2146,"OverallRank":96,"label":"Tyler Glasnow (LAD - SP) (SP) SGP: 4.32 | VAR: 1.21","Jenks":"5","Tier":6},{"Player":"Jeff Hoffman (TOR - RP)","POS":"RP","POSRANK":18,"Total_SGP":4.3772,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.9808,"QSSGP":0,"SVSGP":2.9491,"ERASGP":0.1866,"WHIPSGP":0.2606,"K":75,"QS":0,"SV":26,"IP":62.6,"ER":25,"ERA":3.63,"WHIP":1.17,"Hits":50,"Walks":23,"Repl_SGP":3.2506,"VAR":1.1266,"OverallRank":97,"label":"Jeff Hoffman (TOR - RP) (RP) SGP: 4.38 | VAR: 1.13","Jenks":"5","Tier":6},{"Player":"Kevin Gausman (TOR - SP)","POS":"SP","POSRANK":25,"Total_SGP":4.2112,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.2886,"QSSGP":2.1633,"SVSGP":0,"ERASGP":-0.2506,"WHIPSGP":0.01,"K":175,"QS":16,"SV":0,"IP":179.1,"ER":78,"ERA":3.93,"WHIP":1.21,"Hits":164,"Walks":53,"Repl_SGP":3.1019,"VAR":1.1093,"OverallRank":98,"label":"Kevin Gausman (TOR - SP) (SP) SGP: 4.21 | VAR: 1.11","Jenks":"5","Tier":6},{"Player":"Shane McClanahan (TB - SP)","POS":"SP","POSRANK":45,"Total_SGP":4.2101,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.7786,"QSSGP":1.6225,"SVSGP":0,"ERASGP":0.2967,"WHIPSGP":0.5123,"K":136,"QS":12,"SV":0,"IP":128.4,"ER":52,"ERA":3.63,"WHIP":1.17,"Hits":111,"Walks":39,"Repl_SGP":3.1019,"VAR":1.1081,"OverallRank":99,"label":"Shane McClanahan (TB - SP) (SP) SGP: 4.21 | VAR: 1.11","Jenks":"5","Tier":6},{"Player":"Griffin Jax (TB - RP)","POS":"RP","POSRANK":12,"Total_SGP":4.347,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.0854,"QSSGP":0,"SVSGP":1.8148,"ERASGP":0.7233,"WHIPSGP":0.7233,"K":83,"QS":0,"SV":16,"IP":66,"ER":22,"ERA":3.02,"WHIP":1.08,"Hits":53,"Walks":19,"Repl_SGP":3.2506,"VAR":1.0964,"OverallRank":100,"label":"Griffin Jax (TB - RP) (RP) SGP: 4.35 | VAR: 1.1","Jenks":"5","Tier":6},{"Player":"Ian Happ (CHC - LF)","POS":"OF","POSRANK":35,"Total_SGP":12.29,"RSGP":4.1757,"HRSGP":2.7211,"RBISGP":4.1688,"SBSGP":0.7214,"OBPSGP":0.503,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":81,"HR":22,"RBI":77,"SB":8,"OBP":0.338,"AB":552,"H":133,"BB":80,"Repl_SGP":11.2129,"VAR":1.0771,"OverallRank":101,"label":"Ian Happ (CHC - LF) (OF) SGP: 12.29 | VAR: 1.08","Jenks":"5","Tier":6},{"Player":"Emmet Sheehan (LAD - SP)","POS":"SP","POSRANK":38,"Total_SGP":4.1705,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.0401,"QSSGP":1.4873,"SVSGP":0,"ERASGP":0.0039,"WHIPSGP":0.6391,"K":156,"QS":11,"SV":0,"IP":134.5,"ER":57,"ERA":3.81,"WHIP":1.16,"Hits":111,"Walks":45,"Repl_SGP":3.1019,"VAR":1.0685,"OverallRank":102,"label":"Emmet Sheehan (LAD - SP) (SP) SGP: 4.17 | VAR: 1.07","Jenks":"5","Tier":6},{"Player":"Daniel Palencia (CHC - RP)","POS":"RP","POSRANK":21,"Total_SGP":4.2927,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.9547,"QSSGP":0,"SVSGP":3.4028,"ERASGP":0.1426,"WHIPSGP":-0.2075,"K":73,"QS":0,"SV":30,"IP":64.1,"ER":26,"ERA":3.64,"WHIP":1.24,"Hits":53,"Walks":27,"Repl_SGP":3.2506,"VAR":1.0421,"OverallRank":103,"label":"Daniel Palencia (CHC - RP) (RP) SGP: 4.29 | VAR: 1.04","Jenks":"5","Tier":6},{"Player":"Byron Buxton (MIN - CF)","POS":"OF","POSRANK":18,"Total_SGP":12.2361,"RSGP":4.0726,"HRSGP":3.4633,"RBISGP":3.8981,"SBSGP":1.5331,"OBPSGP":-0.7309,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":79,"HR":28,"RBI":72,"SB":17,"OBP":0.309,"AB":475,"H":119,"BB":41,"Repl_SGP":11.2129,"VAR":1.0232,"OverallRank":104,"label":"Byron Buxton (MIN - CF) (OF) SGP: 12.24 | VAR: 1.02","Jenks":"5","Tier":6},{"Player":"Shota Imanaga (CHC - SP)","POS":"SP","POSRANK":40,"Total_SGP":4.0972,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.857,"QSSGP":1.8929,"SVSGP":0,"ERASGP":-0.5301,"WHIPSGP":0.8774,"K":142,"QS":14,"SV":0,"IP":154.8,"ER":70,"ERA":4.09,"WHIP":1.15,"Hits":144,"Walks":34,"Repl_SGP":3.1019,"VAR":0.9953,"OverallRank":105,"label":"Shota Imanaga (CHC - SP) (SP) SGP: 4.1 | VAR: 1","Jenks":"5","Tier":6},{"Player":"Spencer Strider (ATL - SP)","POS":"SP","POSRANK":28,"Total_SGP":4.0098,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.4455,"QSSGP":1.8929,"SVSGP":0,"ERASGP":-0.2282,"WHIPSGP":-0.1005,"K":187,"QS":14,"SV":0,"IP":158.3,"ER":69,"ERA":3.95,"WHIP":1.21,"Hits":137,"Walks":56,"Repl_SGP":3.1019,"VAR":0.9079,"OverallRank":106,"label":"Spencer Strider (ATL - SP) (SP) SGP: 4.01 | VAR: 0.91","Jenks":"5","Tier":6},{"Player":"Chase Burns (CIN - SP,RP)","POS":"SP","POSRANK":51,"Total_SGP":3.9975,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.8047,"QSSGP":1.3521,"SVSGP":0,"ERASGP":0.34,"WHIPSGP":0.5007,"K":138,"QS":10,"SV":0,"IP":115.1,"ER":46,"ERA":3.63,"WHIP":1.16,"Hits":98,"Walks":36,"Repl_SGP":3.1019,"VAR":0.8956,"OverallRank":107,"label":"Chase Burns (CIN - SP,RP) (SP) SGP: 4 | VAR: 0.9","Jenks":"5","Tier":6},{"Player":"Luke Keaschall (MIN - 2B)","POS":"2B","POSRANK":10,"Total_SGP":10.5958,"RSGP":3.454,"HRSGP":1.3606,"RBISGP":3.1401,"SBSGP":2.1643,"OBPSGP":0.4769,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":67,"HR":11,"RBI":58,"SB":24,"OBP":0.337,"AB":475,"H":127,"BB":51,"Repl_SGP":9.7077,"VAR":0.8881,"OverallRank":108,"label":"Luke Keaschall (MIN - 2B) (2B) SGP: 10.6 | VAR: 0.89","Jenks":"5","Tier":6},{"Player":"Geraldo Perdomo (ARI - SS)","POS":"SS","POSRANK":13,"Total_SGP":12.912,"RSGP":4.485,"HRSGP":1.6079,"RBISGP":3.5191,"SBSGP":1.8938,"OBPSGP":1.4062,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":87,"HR":13,"RBI":65,"SB":21,"OBP":0.355,"AB":552,"H":146,"BB":77,"Repl_SGP":12.0377,"VAR":0.8743,"OverallRank":109,"label":"Geraldo Perdomo (ARI - SS) (SS) SGP: 12.91 | VAR: 0.87","Jenks":"5","Tier":6},{"Player":"Jarren Duran (BOS - LF,CF)","POS":"OF","POSRANK":17,"Total_SGP":12.0491,"RSGP":4.2788,"HRSGP":2.1027,"RBISGP":3.8439,"SBSGP":2.0741,"OBPSGP":-0.2504,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":83,"HR":17,"RBI":71,"SB":23,"OBP":0.322,"AB":555,"H":145,"BB":50,"Repl_SGP":11.2129,"VAR":0.8362,"OverallRank":110,"label":"Jarren Duran (BOS - LF,CF) (OF) SGP: 12.05 | VAR: 0.84","Jenks":"5","Tier":6},{"Player":"Cody Bellinger (NYY - LF,CF,RF)","POS":"OF","POSRANK":20,"Total_SGP":12.0411,"RSGP":4.021,"HRSGP":2.8448,"RBISGP":4.4395,"SBSGP":0.992,"OBPSGP":-0.2562,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":78,"HR":23,"RBI":82,"SB":11,"OBP":0.321,"AB":543,"H":141,"BB":50,"Repl_SGP":11.2129,"VAR":0.8282,"OverallRank":111,"label":"Cody Bellinger (NYY - LF,CF,RF) (OF) SGP: 12.04 | VAR: 0.83","Jenks":"5","Tier":6},{"Player":"Ryan Walker (SF - RP)","POS":"RP","POSRANK":23,"Total_SGP":4.0701,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.8631,"QSSGP":0,"SVSGP":2.8357,"ERASGP":0.3023,"WHIPSGP":0.069,"K":66,"QS":0,"SV":25,"IP":62.5,"ER":24,"ERA":3.49,"WHIP":1.2,"Hits":55,"Walks":20,"Repl_SGP":3.2506,"VAR":0.8195,"OverallRank":112,"label":"Ryan Walker (SF - RP) (RP) SGP: 4.07 | VAR: 0.82","Jenks":"5","Tier":6},{"Player":"Emilio Pagan (CIN - RP)","POS":"RP","POSRANK":27,"Total_SGP":4.0568,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.9416,"QSSGP":0,"SVSGP":3.0626,"ERASGP":-0.1533,"WHIPSGP":0.2059,"K":72,"QS":0,"SV":27,"IP":65.4,"ER":29,"ERA":3.95,"WHIP":1.18,"Hits":55,"Walks":22,"Repl_SGP":3.2506,"VAR":0.8062,"OverallRank":113,"label":"Emilio Pagan (CIN - RP) (RP) SGP: 4.06 | VAR: 0.81","Jenks":"5","Tier":6},{"Player":"Taylor Ward (BAL - LF)","POS":"OF","POSRANK":29,"Total_SGP":12.0044,"RSGP":4.0726,"HRSGP":3.3396,"RBISGP":4.4936,"SBSGP":0.4509,"OBPSGP":-0.3523,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":79,"HR":27,"RBI":83,"SB":5,"OBP":0.322,"AB":556,"H":134,"BB":65,"Repl_SGP":11.2129,"VAR":0.7915,"OverallRank":114,"label":"Taylor Ward (BAL - LF) (OF) SGP: 12 | VAR: 0.79","Jenks":"5","Tier":6},{"Player":"Ranger Suarez (BOS - SP)","POS":"SP","POSRANK":32,"Total_SGP":3.8263,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9616,"QSSGP":2.0281,"SVSGP":0,"ERASGP":0.3425,"WHIPSGP":-0.5059,"K":150,"QS":15,"SV":0,"IP":167,"ER":68,"ERA":3.67,"WHIP":1.25,"Hits":161,"Walks":47,"Repl_SGP":3.1019,"VAR":0.7244,"OverallRank":115,"label":"Ranger Suarez (BOS - SP) (SP) SGP: 3.83 | VAR: 0.72","Jenks":"5","Tier":6},{"Player":"Josh Naylor (SEA - 1B,DH)","POS":"1B","POSRANK":8,"Total_SGP":12.6369,"RSGP":3.7633,"HRSGP":2.7211,"RBISGP":4.656,"SBSGP":1.5331,"OBPSGP":-0.0366,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":73,"HR":22,"RBI":86,"SB":17,"OBP":0.326,"AB":544,"H":144,"BB":50,"Repl_SGP":11.9166,"VAR":0.7203,"OverallRank":116,"label":"Josh Naylor (SEA - 1B,DH) (1B) SGP: 12.64 | VAR: 0.72","Jenks":"5","Tier":6},{"Player":"Eury Perez (MIA - SP)","POS":"SP","POSRANK":47,"Total_SGP":3.8162,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9747,"QSSGP":1.6225,"SVSGP":0,"ERASGP":-0.2059,"WHIPSGP":0.4248,"K":151,"QS":12,"SV":0,"IP":137.5,"ER":60,"ERA":3.91,"WHIP":1.18,"Hits":115,"Walks":47,"Repl_SGP":3.1019,"VAR":0.7143,"OverallRank":117,"label":"Eury Perez (MIA - SP) (SP) SGP: 3.82 | VAR: 0.71","Jenks":"5","Tier":6},{"Player":"Bryson Stott (PHI - 2B,SS)","POS":"2B","POSRANK":11,"Total_SGP":10.42,"RSGP":3.5055,"HRSGP":1.6079,"RBISGP":3.3025,"SBSGP":2.1643,"OBPSGP":-0.1603,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":68,"HR":13,"RBI":61,"SB":24,"OBP":0.322,"AB":514,"H":132,"BB":51,"Repl_SGP":9.7077,"VAR":0.7123,"OverallRank":118,"label":"Bryson Stott (PHI - 2B,SS) (2B) SGP: 10.42 | VAR: 0.71","Jenks":"5","Tier":6},{"Player":"Corey Seager (TEX - SS)","POS":"SS","POSRANK":11,"Total_SGP":12.7243,"RSGP":3.7633,"HRSGP":3.3396,"RBISGP":4.2229,"SBSGP":0.1804,"OBPSGP":1.2182,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":73,"HR":27,"RBI":78,"SB":2,"OBP":0.355,"AB":472,"H":129,"BB":60,"Repl_SGP":12.0377,"VAR":0.6866,"OverallRank":119,"label":"Corey Seager (TEX - SS) (SS) SGP: 12.72 | VAR: 0.69","Jenks":"5","Tier":6},{"Player":"Oneil Cruz (PIT - CF)","POS":"OF","POSRANK":34,"Total_SGP":11.8962,"RSGP":3.6086,"HRSGP":2.7211,"RBISGP":3.5191,"SBSGP":2.5251,"OBPSGP":-0.4777,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":70,"HR":22,"RBI":65,"SB":28,"OBP":0.317,"AB":475,"H":112,"BB":56,"Repl_SGP":11.2129,"VAR":0.6833,"OverallRank":120,"label":"Oneil Cruz (PIT - CF) (OF) SGP: 11.9 | VAR: 0.68","Jenks":"5","Tier":6},{"Player":"Pete Fairbanks (MIA - RP)","POS":"RP","POSRANK":31,"Total_SGP":3.9261,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.8108,"QSSGP":0,"SVSGP":2.9491,"ERASGP":0.1793,"WHIPSGP":-0.0131,"K":62,"QS":0,"SV":26,"IP":60.1,"ER":24,"ERA":3.55,"WHIP":1.21,"Hits":52,"Walks":21,"Repl_SGP":3.2506,"VAR":0.6756,"OverallRank":121,"label":"Pete Fairbanks (MIA - RP) (RP) SGP: 3.93 | VAR: 0.68","Jenks":"5","Tier":6},{"Player":"Drake Baldwin (ATL - C)","POS":"C","POSRANK":8,"Total_SGP":9.8957,"RSGP":3.2993,"HRSGP":2.3501,"RBISGP":3.9522,"SBSGP":0.0902,"OBPSGP":0.204,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":64,"HR":19,"RBI":73,"SB":1,"OBP":0.331,"AB":478,"H":126,"BB":49,"Repl_SGP":9.228,"VAR":0.6677,"OverallRank":122,"label":"Drake Baldwin (ATL - C) (C) SGP: 9.9 | VAR: 0.67","Jenks":"5","Tier":6},{"Player":"Ryan Pepiot (TB - SP)","POS":"SP","POSRANK":39,"Total_SGP":3.6938,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.2363,"QSSGP":2.0281,"SVSGP":0,"ERASGP":-0.4839,"WHIPSGP":-0.0867,"K":171,"QS":15,"SV":0,"IP":167.5,"ER":75,"ERA":4.05,"WHIP":1.22,"Hits":145,"Walks":59,"Repl_SGP":3.1019,"VAR":0.5918,"OverallRank":123,"label":"Ryan Pepiot (TB - SP) (SP) SGP: 3.69 | VAR: 0.59","Jenks":"5","Tier":6},{"Player":"Willy Adames (SF - SS)","POS":"SS","POSRANK":14,"Total_SGP":12.6091,"RSGP":4.2272,"HRSGP":3.3396,"RBISGP":4.5477,"SBSGP":1.0822,"OBPSGP":-0.5876,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":82,"HR":27,"RBI":84,"SB":12,"OBP":0.317,"AB":575,"H":134,"BB":70,"Repl_SGP":12.0377,"VAR":0.5714,"OverallRank":124,"label":"Willy Adames (SF - SS) (SS) SGP: 12.61 | VAR: 0.57","Jenks":"5","Tier":6},{"Player":"Michael King (SD - SP)","POS":"SP","POSRANK":37,"Total_SGP":3.654,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.1578,"QSSGP":1.8929,"SVSGP":0,"ERASGP":-0.0262,"WHIPSGP":-0.3705,"K":165,"QS":14,"SV":0,"IP":157.5,"ER":67,"ERA":3.81,"WHIP":1.24,"Hits":139,"Walks":56,"Repl_SGP":3.1019,"VAR":0.5521,"OverallRank":125,"label":"Michael King (SD - SP) (SP) SGP: 3.65 | VAR: 0.55","Jenks":"5","Tier":6},{"Player":"Tanner Bibee (CLE - SP)","POS":"SP","POSRANK":30,"Total_SGP":3.6503,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.1709,"QSSGP":2.0281,"SVSGP":0,"ERASGP":-0.3488,"WHIPSGP":-0.1999,"K":166,"QS":15,"SV":0,"IP":177.2,"ER":78,"ERA":3.94,"WHIP":1.22,"Hits":164,"Walks":53,"Repl_SGP":3.1019,"VAR":0.5484,"OverallRank":126,"label":"Tanner Bibee (CLE - SP) (SP) SGP: 3.65 | VAR: 0.55","Jenks":"5","Tier":6},{"Player":"Nick Lodolo (CIN - SP)","POS":"SP","POSRANK":44,"Total_SGP":3.6234,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.027,"QSSGP":1.7577,"SVSGP":0,"ERASGP":-0.4106,"WHIPSGP":0.2493,"K":155,"QS":13,"SV":0,"IP":152.4,"ER":68,"ERA":4.03,"WHIP":1.19,"Hits":141,"Walks":41,"Repl_SGP":3.1019,"VAR":0.5215,"OverallRank":127,"label":"Nick Lodolo (CIN - SP) (SP) SGP: 3.62 | VAR: 0.52","Jenks":"5","Tier":6},{"Player":"Matthew Boyd (CHC - SP)","POS":"SP","POSRANK":34,"Total_SGP":3.6077,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9224,"QSSGP":1.8929,"SVSGP":0,"ERASGP":-0.2395,"WHIPSGP":0.0318,"K":147,"QS":14,"SV":0,"IP":162.8,"ER":71,"ERA":3.92,"WHIP":1.21,"Hits":150,"Walks":47,"Repl_SGP":3.1019,"VAR":0.5058,"OverallRank":128,"label":"Matthew Boyd (CHC - SP) (SP) SGP: 3.61 | VAR: 0.51","Jenks":"5","Tier":6},{"Player":"MacKenzie Gore (TEX - SP)","POS":"SP","POSRANK":35,"Total_SGP":3.5859,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.367,"QSSGP":1.8929,"SVSGP":0,"ERASGP":-0.1354,"WHIPSGP":-0.5387,"K":181,"QS":14,"SV":0,"IP":160.1,"ER":69,"ERA":3.88,"WHIP":1.25,"Hits":140,"Walks":60,"Repl_SGP":3.1019,"VAR":0.484,"OverallRank":129,"label":"MacKenzie Gore (TEX - SP) (SP) SGP: 3.59 | VAR: 0.48","Jenks":"4","Tier":7},{"Player":"Nico Hoerner (CHC - 2B)","POS":"2B","POSRANK":6,"Total_SGP":10.1067,"RSGP":3.8664,"HRSGP":0.8658,"RBISGP":3.086,"SBSGP":2.3447,"OBPSGP":-0.0562,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":75,"HR":7,"RBI":57,"SB":26,"OBP":0.326,"AB":570,"H":159,"BB":40,"Repl_SGP":9.7077,"VAR":0.399,"OverallRank":130,"label":"Nico Hoerner (CHC - 2B) (2B) SGP: 10.11 | VAR: 0.4","Jenks":"4","Tier":7},{"Player":"Joe Musgrove (SD - SP)","POS":"SP","POSRANK":57,"Total_SGP":3.4908,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.7524,"QSSGP":1.7577,"SVSGP":0,"ERASGP":-0.2737,"WHIPSGP":0.2544,"K":134,"QS":13,"SV":0,"IP":140.9,"ER":62,"ERA":3.93,"WHIP":1.2,"Hits":132,"Walks":36,"Repl_SGP":3.1019,"VAR":0.3889,"OverallRank":131,"label":"Joe Musgrove (SD - SP) (SP) SGP: 3.49 | VAR: 0.39","Jenks":"4","Tier":7},{"Player":"Abner Uribe (MIL - RP)","POS":"RP","POSRANK":19,"Total_SGP":3.639,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.0593,"QSSGP":0,"SVSGP":1.9283,"ERASGP":0.6508,"WHIPSGP":0.0006,"K":81,"QS":0,"SV":17,"IP":69.3,"ER":24,"ERA":3.12,"WHIP":1.2,"Hits":53,"Walks":31,"Repl_SGP":3.2506,"VAR":0.3885,"OverallRank":132,"label":"Abner Uribe (MIL - RP) (RP) SGP: 3.64 | VAR: 0.39","Jenks":"4","Tier":7},{"Player":"Gerrit Cole (NYY - SP)","POS":"SP","POSRANK":59,"Total_SGP":3.4692,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.6216,"QSSGP":1.4873,"SVSGP":0,"ERASGP":-0.1024,"WHIPSGP":0.4626,"K":124,"QS":11,"SV":0,"IP":123,"ER":53,"ERA":3.85,"WHIP":1.17,"Hits":108,"Walks":36,"Repl_SGP":3.1019,"VAR":0.3673,"OverallRank":133,"label":"Gerrit Cole (NYY - SP) (SP) SGP: 3.47 | VAR: 0.37","Jenks":"4","Tier":7},{"Player":"Adley Rutschman (BAL - C)","POS":"C","POSRANK":12,"Total_SGP":9.55,"RSGP":3.4024,"HRSGP":2.1027,"RBISGP":3.5732,"SBSGP":0.0902,"OBPSGP":0.3815,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":66,"HR":17,"RBI":66,"SB":1,"OBP":0.336,"AB":492,"H":124,"BB":62,"Repl_SGP":9.228,"VAR":0.322,"OverallRank":134,"label":"Adley Rutschman (BAL - C) (C) SGP: 9.55 | VAR: 0.32","Jenks":"4","Tier":7},{"Player":"Carlos Estevez (KC - RP)","POS":"RP","POSRANK":39,"Total_SGP":3.5589,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.7454,"QSSGP":0,"SVSGP":3.5163,"ERASGP":-0.3612,"WHIPSGP":-0.3416,"K":57,"QS":0,"SV":31,"IP":63.7,"ER":30,"ERA":4.23,"WHIP":1.27,"Hits":58,"Walks":23,"Repl_SGP":3.2506,"VAR":0.3084,"OverallRank":135,"label":"Carlos Estevez (KC - RP) (RP) SGP: 3.56 | VAR: 0.31","Jenks":"4","Tier":7},{"Player":"Carlos Rodon (NYY - SP)","POS":"SP","POSRANK":46,"Total_SGP":3.3769,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9878,"QSSGP":1.7577,"SVSGP":0,"ERASGP":-0.2901,"WHIPSGP":-0.0785,"K":152,"QS":13,"SV":0,"IP":145.3,"ER":64,"ERA":3.99,"WHIP":1.22,"Hits":124,"Walks":53,"Repl_SGP":3.1019,"VAR":0.275,"OverallRank":136,"label":"Carlos Rodon (NYY - SP) (SP) SGP: 3.38 | VAR: 0.27","Jenks":"4","Tier":7},{"Player":"Hunter Greene (CIN - SP)","POS":"SP","POSRANK":82,"Total_SGP":3.3602,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.3993,"QSSGP":1.0817,"SVSGP":0,"ERASGP":0.1385,"WHIPSGP":0.7407,"K":107,"QS":8,"SV":0,"IP":87.6,"ER":36,"ERA":3.69,"WHIP":1.12,"Hits":70,"Walks":28,"Repl_SGP":3.1019,"VAR":0.2583,"OverallRank":137,"label":"Hunter Greene (CIN - SP) (SP) SGP: 3.36 | VAR: 0.26","Jenks":"4","Tier":7},{"Player":"Marcus Semien (NYM - 2B)","POS":"2B","POSRANK":14,"Total_SGP":9.9326,"RSGP":3.8664,"HRSGP":2.3501,"RBISGP":3.7898,"SBSGP":0.8116,"OBPSGP":-0.8852,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":75,"HR":19,"RBI":70,"SB":9,"OBP":0.309,"AB":541,"H":130,"BB":54,"Repl_SGP":9.7077,"VAR":0.2249,"OverallRank":138,"label":"Marcus Semien (NYM - 2B) (2B) SGP: 9.93 | VAR: 0.22","Jenks":"4","Tier":7},{"Player":"Vinnie Pasquantino (KC - 1B,DH)","POS":"1B","POSRANK":9,"Total_SGP":12.0903,"RSGP":3.8148,"HRSGP":3.3396,"RBISGP":5.035,"SBSGP":0.0902,"OBPSGP":-0.1893,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":74,"HR":27,"RBI":93,"SB":1,"OBP":0.325,"AB":566,"H":148,"BB":52,"Repl_SGP":11.9166,"VAR":0.1737,"OverallRank":139,"label":"Vinnie Pasquantino (KC - 1B,DH) (1B) SGP: 12.09 | VAR: 0.17","Jenks":"4","Tier":7},{"Player":"Trevor Megill (MIL - RP)","POS":"RP","POSRANK":26,"Total_SGP":3.3838,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.9939,"QSSGP":0,"SVSGP":1.9283,"ERASGP":0.3023,"WHIPSGP":0.1593,"K":76,"QS":0,"SV":17,"IP":62.5,"ER":24,"ERA":3.43,"WHIP":1.17,"Hits":51,"Walks":23,"Repl_SGP":3.2506,"VAR":0.1332,"OverallRank":140,"label":"Trevor Megill (MIL - RP) (RP) SGP: 3.38 | VAR: 0.13","Jenks":"4","Tier":7},{"Player":"Jack Flaherty (DET - SP)","POS":"SP","POSRANK":43,"Total_SGP":3.2328,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.2755,"QSSGP":1.8929,"SVSGP":0,"ERASGP":-0.4714,"WHIPSGP":-0.4642,"K":174,"QS":14,"SV":0,"IP":158.3,"ER":71,"ERA":4.01,"WHIP":1.25,"Hits":142,"Walks":55,"Repl_SGP":3.1019,"VAR":0.1308,"OverallRank":141,"label":"Jack Flaherty (DET - SP) (SP) SGP: 3.23 | VAR: 0.13","Jenks":"4","Tier":7},{"Player":"Salvador Perez (KC - C,1B,DH)","POS":"C","POSRANK":5,"Total_SGP":9.3531,"RSGP":3.1447,"HRSGP":3.2159,"RBISGP":4.7102,"SBSGP":0,"OBPSGP":-1.7176,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":61,"HR":26,"RBI":87,"SB":0,"OBP":0.29,"AB":541,"H":136,"BB":30,"Repl_SGP":9.228,"VAR":0.1251,"OverallRank":142,"label":"Salvador Perez (KC - C,1B,DH) (C) SGP: 9.35 | VAR: 0.13","Jenks":"4","Tier":7},{"Player":"Jackson Merrill (SD - CF)","POS":"OF","POSRANK":19,"Total_SGP":11.3241,"RSGP":3.9695,"HRSGP":2.7211,"RBISGP":4.3312,"SBSGP":0.7214,"OBPSGP":-0.4191,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":77,"HR":22,"RBI":80,"SB":8,"OBP":0.318,"AB":556,"H":150,"BB":40,"Repl_SGP":11.2129,"VAR":0.1112,"OverallRank":143,"label":"Jackson Merrill (SD - CF) (OF) SGP: 11.32 | VAR: 0.11","Jenks":"4","Tier":7},{"Player":"Aaron Nola (PHI - SP)","POS":"SP","POSRANK":42,"Total_SGP":3.2018,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.184,"QSSGP":1.8929,"SVSGP":0,"ERASGP":-0.7719,"WHIPSGP":-0.1033,"K":167,"QS":14,"SV":0,"IP":169,"ER":78,"ERA":4.14,"WHIP":1.22,"Hits":161,"Walks":45,"Repl_SGP":3.1019,"VAR":0.0998,"OverallRank":144,"label":"Aaron Nola (PHI - SP) (SP) SGP: 3.2 | VAR: 0.1","Jenks":"4","Tier":7},{"Player":"Yandy Diaz (TB - 1B,DH)","POS":"1B","POSRANK":10,"Total_SGP":12.0001,"RSGP":3.9695,"HRSGP":2.4738,"RBISGP":4.0605,"SBSGP":0.1804,"OBPSGP":1.316,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":77,"HR":20,"RBI":75,"SB":2,"OBP":0.352,"AB":556,"H":159,"BB":58,"Repl_SGP":11.9166,"VAR":0.0835,"OverallRank":145,"label":"Yandy Diaz (TB - 1B,DH) (1B) SGP: 12 | VAR: 0.08","Jenks":"4","Tier":7},{"Player":"Tyler Soderstrom (ATH - 1B,LF)","POS":"OF","POSRANK":30,"Total_SGP":11.2692,"RSGP":3.6086,"HRSGP":3.0922,"RBISGP":4.3853,"SBSGP":0.4509,"OBPSGP":-0.2679,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":70,"HR":25,"RBI":81,"SB":5,"OBP":0.321,"AB":520,"H":134,"BB":49,"Repl_SGP":11.2129,"VAR":0.0563,"OverallRank":146,"label":"Tyler Soderstrom (ATH - 1B,LF) (OF) SGP: 11.27 | VAR: 0.06","Jenks":"4","Tier":7},{"Player":"Brandon Nimmo (TEX - LF,CF)","POS":"OF","POSRANK":32,"Total_SGP":11.2376,"RSGP":4.1241,"HRSGP":2.5975,"RBISGP":3.8981,"SBSGP":0.8116,"OBPSGP":-0.1937,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":80,"HR":21,"RBI":72,"SB":9,"OBP":0.323,"AB":550,"H":138,"BB":59,"Repl_SGP":11.2129,"VAR":0.0247,"OverallRank":147,"label":"Brandon Nimmo (TEX - LF,CF) (OF) SGP: 11.24 | VAR: 0.02","Jenks":"4","Tier":7},{"Player":"Jorge Polanco (NYM - 2B,3B,DH)","POS":"2B","POSRANK":18,"Total_SGP":9.7077,"RSGP":3.1962,"HRSGP":2.5975,"RBISGP":3.7898,"SBSGP":0.4509,"OBPSGP":-0.3266,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":62,"HR":21,"RBI":70,"SB":5,"OBP":0.319,"AB":456,"H":113,"BB":48,"Repl_SGP":9.7077,"VAR":0,"OverallRank":148,"label":"Jorge Polanco (NYM - 2B,3B,DH) (2B) SGP: 9.71 | VAR: 0","Jenks":"4","Tier":7},{"Player":"Kazuma Okamoto (TOR - 1B,3B)","POS":"3B","POSRANK":12,"Total_SGP":9.86,"RSGP":3.1962,"HRSGP":2.8448,"RBISGP":3.9522,"SBSGP":0.1804,"OBPSGP":-0.3136,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":62,"HR":23,"RBI":73,"SB":2,"OBP":0.319,"AB":479,"H":118,"BB":52,"Repl_SGP":9.86,"VAR":0,"OverallRank":149,"label":"Kazuma Okamoto (TOR - 1B,3B) (3B) SGP: 9.86 | VAR: 0","Jenks":"4","Tier":7},{"Player":"Teoscar Hernandez (LAD - LF,RF)","POS":"OF","POSRANK":21,"Total_SGP":11.2129,"RSGP":3.7117,"HRSGP":3.3396,"RBISGP":4.6019,"SBSGP":0.5411,"OBPSGP":-0.9814,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":72,"HR":27,"RBI":85,"SB":6,"OBP":0.306,"AB":528,"H":136,"BB":37,"Repl_SGP":11.2129,"VAR":0,"OverallRank":150,"label":"Teoscar Hernandez (LAD - LF,RF) (OF) SGP: 11.21 | VAR: 0","Jenks":"4","Tier":7},{"Player":"Agustin Ramirez (MIA - C,DH)","POS":"C","POSRANK":11,"Total_SGP":9.228,"RSGP":3.2478,"HRSGP":2.3501,"RBISGP":3.5732,"SBSGP":1.1723,"OBPSGP":-1.1154,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":63,"HR":19,"RBI":66,"SB":13,"OBP":0.301,"AB":474,"H":116,"BB":38,"Repl_SGP":9.228,"VAR":0,"OverallRank":151,"label":"Agustin Ramirez (MIA - C,DH) (C) SGP: 9.23 | VAR: 0","Jenks":"4","Tier":7},{"Player":"Shane Bieber (TOR - SP)","POS":"SP","POSRANK":71,"Total_SGP":3.1019,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.3993,"QSSGP":1.3521,"SVSGP":0,"ERASGP":0.0227,"WHIPSGP":0.3278,"K":107,"QS":10,"SV":0,"IP":116,"ER":49,"ERA":3.8,"WHIP":1.18,"Hits":109,"Walks":28,"Repl_SGP":3.1019,"VAR":0,"OverallRank":152,"label":"Shane Bieber (TOR - SP) (SP) SGP: 3.1 | VAR: 0","Jenks":"4","Tier":7},{"Player":"Robert Garcia (TEX - RP)","POS":"RP","POSRANK":33,"Total_SGP":3.2506,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.8762,"QSSGP":0,"SVSGP":2.2686,"ERASGP":0.1354,"WHIPSGP":-0.0295,"K":67,"QS":0,"SV":20,"IP":61.6,"ER":25,"ERA":3.61,"WHIP":1.22,"Hits":53,"Walks":22,"Repl_SGP":3.2506,"VAR":0,"OverallRank":153,"label":"Robert Garcia (TEX - RP) (RP) SGP: 3.25 | VAR: 0","Jenks":"4","Tier":7},{"Player":"Ozzie Albies (ATL - 2B)","POS":"2B","POSRANK":12,"Total_SGP":9.6735,"RSGP":3.6086,"HRSGP":2.2264,"RBISGP":3.7898,"SBSGP":0.992,"OBPSGP":-0.9433,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":70,"HR":18,"RBI":70,"SB":11,"OBP":0.308,"AB":544,"H":137,"BB":44,"Repl_SGP":9.7077,"VAR":-0.0342,"OverallRank":154,"label":"Ozzie Albies (ATL - 2B) (2B) SGP: 9.67 | VAR: -0.03","Jenks":"4","Tier":7},{"Player":"Xavier Edwards (MIA - 2B,SS)","POS":"2B","POSRANK":13,"Total_SGP":9.6686,"RSGP":3.6086,"HRSGP":0.4948,"RBISGP":2.4904,"SBSGP":2.4349,"OBPSGP":0.6399,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":70,"HR":4,"RBI":46,"SB":27,"OBP":0.342,"AB":529,"H":148,"BB":49,"Repl_SGP":9.7077,"VAR":-0.0391,"OverallRank":155,"label":"Xavier Edwards (MIA - 2B,SS) (2B) SGP: 9.67 | VAR: -0.04","Jenks":"4","Tier":7},{"Player":"Michael Busch (CHC - 1B)","POS":"1B","POSRANK":12,"Total_SGP":11.865,"RSGP":3.9695,"HRSGP":3.3396,"RBISGP":4.277,"SBSGP":0.2705,"OBPSGP":0.0083,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":77,"HR":27,"RBI":79,"SB":3,"OBP":0.327,"AB":514,"H":128,"BB":60,"Repl_SGP":11.9166,"VAR":-0.0516,"OverallRank":156,"label":"Michael Busch (CHC - 1B) (1B) SGP: 11.86 | VAR: -0.05","Jenks":"4","Tier":7},{"Player":"Edward Cabrera (CHC - SP)","POS":"SP","POSRANK":52,"Total_SGP":3.0408,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9355,"QSSGP":1.6225,"SVSGP":0,"ERASGP":-0.1801,"WHIPSGP":-0.337,"K":148,"QS":12,"SV":0,"IP":138,"ER":60,"ERA":3.9,"WHIP":1.24,"Hits":117,"Walks":54,"Repl_SGP":3.1019,"VAR":-0.0611,"OverallRank":157,"label":"Edward Cabrera (CHC - SP) (SP) SGP: 3.04 | VAR: -0.06","Jenks":"4","Tier":7},{"Player":"Trey Yesavage (TOR - SP) IL15","POS":"SP","POSRANK":64,"Total_SGP":2.9624,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.8701,"QSSGP":1.4873,"SVSGP":0,"ERASGP":-0.0252,"WHIPSGP":-0.3697,"K":143,"QS":11,"SV":0,"IP":124.5,"ER":53,"ERA":3.8,"WHIP":1.24,"Hits":102,"Walks":53,"Repl_SGP":3.1019,"VAR":-0.1395,"OverallRank":158,"label":"Trey Yesavage (TOR - SP) IL15 (SP) SGP: 2.96 | VAR: -0.14","Jenks":"4","Tier":7},{"Player":"Matt McLain (CIN - 2B)","POS":"2B","POSRANK":19,"Total_SGP":9.5629,"RSGP":3.5571,"HRSGP":2.1027,"RBISGP":3.1942,"SBSGP":1.5331,"OBPSGP":-0.8242,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":69,"HR":17,"RBI":59,"SB":17,"OBP":0.308,"AB":497,"H":117,"BB":53,"Repl_SGP":9.7077,"VAR":-0.1448,"OverallRank":159,"label":"Matt McLain (CIN - 2B) (2B) SGP: 9.56 | VAR: -0.14","Jenks":"4","Tier":7},{"Player":"Dennis Santana (PIT - RP)","POS":"RP","POSRANK":36,"Total_SGP":3.101,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.7977,"QSSGP":0,"SVSGP":2.7223,"ERASGP":-0.102,"WHIPSGP":-0.317,"K":61,"QS":0,"SV":24,"IP":66.4,"ER":29,"ERA":3.93,"WHIP":1.26,"Hits":61,"Walks":23,"Repl_SGP":3.2506,"VAR":-0.1496,"OverallRank":160,"label":"Dennis Santana (PIT - RP) (RP) SGP: 3.1 | VAR: -0.15","Jenks":"4","Tier":7},{"Player":"Kris Bubic (KC - SP)","POS":"SP","POSRANK":53,"Total_SGP":2.9289,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.8047,"QSSGP":1.6225,"SVSGP":0,"ERASGP":0.1112,"WHIPSGP":-0.6095,"K":138,"QS":12,"SV":0,"IP":141.3,"ER":59,"ERA":3.77,"WHIP":1.26,"Hits":131,"Walks":47,"Repl_SGP":3.1019,"VAR":-0.173,"OverallRank":161,"label":"Kris Bubic (KC - SP) (SP) SGP: 2.93 | VAR: -0.17","Jenks":"4","Tier":7},{"Player":"Brandon Lowe (PIT - 2B)","POS":"2B","POSRANK":17,"Total_SGP":9.5326,"RSGP":3.4024,"HRSGP":2.8448,"RBISGP":3.7898,"SBSGP":0.3607,"OBPSGP":-0.8652,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":66,"HR":23,"RBI":70,"SB":4,"OBP":0.306,"AB":478,"H":117,"BB":43,"Repl_SGP":9.7077,"VAR":-0.1751,"OverallRank":162,"label":"Brandon Lowe (PIT - 2B) (2B) SGP: 9.53 | VAR: -0.18","Jenks":"4","Tier":7},{"Player":"Jakob Marsee (MIA - LF,CF)","POS":"OF","POSRANK":46,"Total_SGP":11.0058,"RSGP":3.6602,"HRSGP":1.6079,"RBISGP":2.9235,"SBSGP":2.976,"OBPSGP":-0.1618,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":71,"HR":13,"RBI":54,"SB":33,"OBP":0.322,"AB":497,"H":117,"BB":65,"Repl_SGP":11.2129,"VAR":-0.2071,"OverallRank":163,"label":"Jakob Marsee (MIA - LF,CF) (OF) SGP: 11.01 | VAR: -0.21","Jenks":"4","Tier":7},{"Player":"Lawrence Butler (ATH - CF,RF)","POS":"OF","POSRANK":37,"Total_SGP":10.964,"RSGP":3.7633,"HRSGP":2.5975,"RBISGP":3.6815,"SBSGP":1.7134,"OBPSGP":-0.7917,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":73,"HR":21,"RBI":68,"SB":19,"OBP":0.31,"AB":511,"H":124,"BB":50,"Repl_SGP":11.2129,"VAR":-0.2489,"OverallRank":164,"label":"Lawrence Butler (ATH - CF,RF) (OF) SGP: 10.96 | VAR: -0.25","Jenks":"4","Tier":7},{"Player":"Ceddanne Rafaela (BOS - 2B,CF)","POS":"2B","POSRANK":7,"Total_SGP":9.3882,"RSGP":3.6602,"HRSGP":2.1027,"RBISGP":3.5191,"SBSGP":1.8036,"OBPSGP":-1.6974,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":71,"HR":17,"RBI":65,"SB":20,"OBP":0.289,"AB":529,"H":135,"BB":26,"Repl_SGP":9.7077,"VAR":-0.3195,"OverallRank":165,"label":"Ceddanne Rafaela (BOS - 2B,CF) (2B) SGP: 9.39 | VAR: -0.32","Jenks":"4","Tier":7},{"Player":"Jo Adell (LAA - CF,RF)","POS":"OF","POSRANK":31,"Total_SGP":10.8925,"RSGP":3.5055,"HRSGP":3.8343,"RBISGP":4.4936,"SBSGP":0.8116,"OBPSGP":-1.7526,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":68,"HR":31,"RBI":83,"SB":9,"OBP":0.289,"AB":515,"H":121,"BB":39,"Repl_SGP":11.2129,"VAR":-0.3204,"OverallRank":166,"label":"Jo Adell (LAA - CF,RF) (OF) SGP: 10.89 | VAR: -0.32","Jenks":"4","Tier":7},{"Player":"Bryan Abreu (HOU - RP)","POS":"RP","POSRANK":25,"Total_SGP":2.9143,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.177,"QSSGP":0,"SVSGP":0.9074,"ERASGP":0.5637,"WHIPSGP":0.2662,"K":90,"QS":0,"SV":8,"IP":67.6,"ER":24,"ERA":3.17,"WHIP":1.17,"Hits":51,"Walks":28,"Repl_SGP":3.2506,"VAR":-0.3363,"OverallRank":167,"label":"Bryan Abreu (HOU - RP) (RP) SGP: 2.91 | VAR: -0.34","Jenks":"4","Tier":7},{"Player":"Nolan McLean (NYM - SP)","POS":"SP","POSRANK":48,"Total_SGP":2.763,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.8963,"QSSGP":1.7577,"SVSGP":0,"ERASGP":-0.0223,"WHIPSGP":-0.8687,"K":145,"QS":13,"SV":0,"IP":150.5,"ER":64,"ERA":3.82,"WHIP":1.28,"Hits":134,"Walks":58,"Repl_SGP":3.1019,"VAR":-0.339,"OverallRank":168,"label":"Nolan McLean (NYM - SP) (SP) SGP: 2.76 | VAR: -0.34","Jenks":"4","Tier":7},{"Player":"Mike Trout (LAA - CF,RF,DH)","POS":"OF","POSRANK":54,"Total_SGP":10.8682,"RSGP":3.454,"HRSGP":2.9685,"RBISGP":3.5732,"SBSGP":0.2705,"OBPSGP":0.602,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":67,"HR":24,"RBI":66,"SB":3,"OBP":0.342,"AB":433,"H":102,"BB":70,"Repl_SGP":11.2129,"VAR":-0.3447,"OverallRank":169,"label":"Mike Trout (LAA - CF,RF,DH) (OF) SGP: 10.87 | VAR: -0.34","Jenks":"4","Tier":7},{"Player":"Zac Gallen (ARI - SP)","POS":"SP","POSRANK":41,"Total_SGP":2.7105,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.197,"QSSGP":2.1633,"SVSGP":0,"ERASGP":-0.7125,"WHIPSGP":-0.9374,"K":168,"QS":16,"SV":0,"IP":179.6,"ER":82,"ERA":4.12,"WHIP":1.27,"Hits":170,"Walks":58,"Repl_SGP":3.1019,"VAR":-0.3914,"OverallRank":170,"label":"Zac Gallen (ARI - SP) (SP) SGP: 2.71 | VAR: -0.39","Jenks":"4","Tier":7},{"Player":"Steven Kwan (CLE - LF)","POS":"OF","POSRANK":33,"Total_SGP":10.7936,"RSGP":4.1757,"HRSGP":1.2369,"RBISGP":3.0318,"SBSGP":1.6232,"OBPSGP":0.7259,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":81,"HR":10,"RBI":56,"SB":18,"OBP":0.341,"AB":581,"H":160,"BB":58,"Repl_SGP":11.2129,"VAR":-0.4193,"OverallRank":171,"label":"Steven Kwan (CLE - LF) (OF) SGP: 10.79 | VAR: -0.42","Jenks":"3","Tier":8},{"Player":"Bryce Miller (SEA - SP)","POS":"SP","POSRANK":61,"Total_SGP":2.6527,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.6478,"QSSGP":1.6225,"SVSGP":0,"ERASGP":-0.5969,"WHIPSGP":-0.0207,"K":126,"QS":12,"SV":0,"IP":141.7,"ER":65,"ERA":4.14,"WHIP":1.21,"Hits":130,"Walks":42,"Repl_SGP":3.1019,"VAR":-0.4492,"OverallRank":172,"label":"Bryce Miller (SEA - SP) (SP) SGP: 2.65 | VAR: -0.45","Jenks":"3","Tier":8},{"Player":"CJ Abrams (WSH - SS)","POS":"SS","POSRANK":9,"Total_SGP":11.5706,"RSGP":4.2272,"HRSGP":2.3501,"RBISGP":3.5732,"SBSGP":2.7956,"OBPSGP":-1.3755,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":82,"HR":19,"RBI":66,"SB":31,"OBP":0.3,"AB":563,"H":142,"BB":38,"Repl_SGP":12.0377,"VAR":-0.4671,"OverallRank":173,"label":"CJ Abrams (WSH - SS) (SS) SGP: 11.57 | VAR: -0.47","Jenks":"3","Tier":8},{"Player":"Sean Manaea (NYM - SP,RP)","POS":"SP","POSRANK":68,"Total_SGP":2.6315,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.7262,"QSSGP":1.2169,"SVSGP":0,"ERASGP":-0.387,"WHIPSGP":0.0754,"K":132,"QS":9,"SV":0,"IP":126.9,"ER":57,"ERA":4.07,"WHIP":1.21,"Hits":113,"Walks":40,"Repl_SGP":3.1019,"VAR":-0.4704,"OverallRank":174,"label":"Sean Manaea (NYM - SP,RP) (SP) SGP: 2.63 | VAR: -0.47","Jenks":"3","Tier":8},{"Player":"Kyle Stowers (MIA - LF,CF,RF)","POS":"OF","POSRANK":41,"Total_SGP":10.7152,"RSGP":3.5055,"HRSGP":3.0922,"RBISGP":4.2229,"SBSGP":0.3607,"OBPSGP":-0.4662,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":68,"HR":25,"RBI":78,"SB":4,"OBP":0.316,"AB":502,"H":123,"BB":53,"Repl_SGP":11.2129,"VAR":-0.4977,"OverallRank":175,"label":"Kyle Stowers (MIA - LF,CF,RF) (OF) SGP: 10.72 | VAR: -0.5","Jenks":"3","Tier":8},{"Player":"Max Muncy (LAD - 3B)","POS":"3B","POSRANK":29,"Total_SGP":9.3591,"RSGP":2.9385,"HRSGP":2.4738,"RBISGP":3.3025,"SBSGP":0.2705,"OBPSGP":0.3738,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":57,"HR":20,"RBI":61,"SB":3,"OBP":0.339,"AB":366,"H":82,"BB":63,"Repl_SGP":9.86,"VAR":-0.5009,"OverallRank":176,"label":"Max Muncy (LAD - 3B) (3B) SGP: 9.36 | VAR: -0.5","Jenks":"3","Tier":8},{"Player":"Spencer Torkelson (DET - 1B)","POS":"1B","POSRANK":14,"Total_SGP":11.4101,"RSGP":3.9179,"HRSGP":3.3396,"RBISGP":4.4395,"SBSGP":0.1804,"OBPSGP":-0.4672,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":76,"HR":27,"RBI":82,"SB":2,"OBP":0.317,"AB":544,"H":128,"BB":66,"Repl_SGP":11.9166,"VAR":-0.5065,"OverallRank":177,"label":"Spencer Torkelson (DET - 1B) (1B) SGP: 11.41 | VAR: -0.51","Jenks":"3","Tier":8},{"Player":"Miguel Vargas (CWS - 1B,3B)","POS":"3B","POSRANK":19,"Total_SGP":9.3457,"RSGP":3.6086,"HRSGP":2.1027,"RBISGP":3.4649,"SBSGP":0.6313,"OBPSGP":-0.4619,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":70,"HR":17,"RBI":64,"SB":7,"OBP":0.317,"AB":504,"H":119,"BB":60,"Repl_SGP":9.86,"VAR":-0.5143,"OverallRank":178,"label":"Miguel Vargas (CWS - 1B,3B) (3B) SGP: 9.35 | VAR: -0.51","Jenks":"3","Tier":8},{"Player":"Jacob Misiorowski (MIL - SP)","POS":"SP","POSRANK":60,"Total_SGP":2.5857,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.0532,"QSSGP":1.6225,"SVSGP":0,"ERASGP":-0.247,"WHIPSGP":-0.843,"K":157,"QS":12,"SV":0,"IP":136.7,"ER":60,"ERA":3.96,"WHIP":1.28,"Hits":111,"Walks":64,"Repl_SGP":3.1019,"VAR":-0.5163,"OverallRank":179,"label":"Jacob Misiorowski (MIL - SP) (SP) SGP: 2.59 | VAR: -0.52","Jenks":"3","Tier":8},{"Player":"Merrill Kelly (ARI - SP)","POS":"SP","POSRANK":54,"Total_SGP":2.5845,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.8701,"QSSGP":1.8929,"SVSGP":0,"ERASGP":-0.5158,"WHIPSGP":-0.6627,"K":143,"QS":14,"SV":0,"IP":159.8,"ER":72,"ERA":4.05,"WHIP":1.26,"Hits":153,"Walks":48,"Repl_SGP":3.1019,"VAR":-0.5174,"OverallRank":180,"label":"Merrill Kelly (ARI - SP) (SP) SGP: 2.58 | VAR: -0.52","Jenks":"3","Tier":8},{"Player":"Luis Robert Jr. (NYM - CF)","POS":"OF","POSRANK":40,"Total_SGP":10.6883,"RSGP":3.4024,"HRSGP":2.4738,"RBISGP":3.5191,"SBSGP":2.7054,"OBPSGP":-1.4124,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":66,"HR":20,"RBI":65,"SB":30,"OBP":0.293,"AB":480,"H":113,"BB":40,"Repl_SGP":11.2129,"VAR":-0.5246,"OverallRank":181,"label":"Luis Robert Jr. (NYM - CF) (OF) SGP: 10.69 | VAR: -0.52","Jenks":"3","Tier":8},{"Player":"Grayson Rodriguez (LAA - SP) IL10","POS":"SP","POSRANK":80,"Total_SGP":2.5684,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.6739,"QSSGP":1.4873,"SVSGP":0,"ERASGP":-0.2617,"WHIPSGP":-0.3312,"K":128,"QS":11,"SV":0,"IP":119.9,"ER":53,"ERA":3.95,"WHIP":1.24,"Hits":109,"Walks":40,"Repl_SGP":3.1019,"VAR":-0.5336,"OverallRank":182,"label":"Grayson Rodriguez (LAA - SP) IL10 (SP) SGP: 2.57 | VAR: -0.53","Jenks":"3","Tier":8},{"Player":"Isaac Paredes (HOU - 3B)","POS":"3B","POSRANK":24,"Total_SGP":9.2769,"RSGP":3.0931,"HRSGP":2.4738,"RBISGP":3.4649,"SBSGP":0.0902,"OBPSGP":0.1549,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":60,"HR":20,"RBI":64,"SB":1,"OBP":0.332,"AB":427,"H":104,"BB":56,"Repl_SGP":9.86,"VAR":-0.5831,"OverallRank":183,"label":"Isaac Paredes (HOU - 3B) (3B) SGP: 9.28 | VAR: -0.58","Jenks":"3","Tier":8},{"Player":"Bailey Ober (MIN - SP)","POS":"SP","POSRANK":62,"Total_SGP":2.5134,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.857,"QSSGP":1.7577,"SVSGP":0,"ERASGP":-1.1414,"WHIPSGP":0.04,"K":142,"QS":13,"SV":0,"IP":157.1,"ER":76,"ERA":4.36,"WHIP":1.21,"Hits":152,"Walks":38,"Repl_SGP":3.1019,"VAR":-0.5885,"OverallRank":184,"label":"Bailey Ober (MIN - SP) (SP) SGP: 2.51 | VAR: -0.59","Jenks":"3","Tier":8},{"Player":"Jackson Holliday (BAL - 2B,SS)","POS":"2B","POSRANK":23,"Total_SGP":9.1172,"RSGP":3.5055,"HRSGP":1.7316,"RBISGP":2.8153,"SBSGP":1.1723,"OBPSGP":-0.1075,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":68,"HR":14,"RBI":52,"SB":13,"OBP":0.327,"AB":454,"H":113,"BB":51,"Repl_SGP":9.7077,"VAR":-0.5905,"OverallRank":185,"label":"Jackson Holliday (BAL - 2B,SS) (2B) SGP: 9.12 | VAR: -0.59","Jenks":"3","Tier":8},{"Player":"Gavin Williams (CLE - SP)","POS":"SP","POSRANK":50,"Total_SGP":2.5013,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.2101,"QSSGP":2.0281,"SVSGP":0,"ERASGP":-0.3127,"WHIPSGP":-1.4243,"K":169,"QS":15,"SV":0,"IP":166.1,"ER":73,"ERA":3.98,"WHIP":1.31,"Hits":146,"Walks":71,"Repl_SGP":3.1019,"VAR":-0.6006,"OverallRank":186,"label":"Gavin Williams (CLE - SP) (SP) SGP: 2.5 | VAR: -0.6","Jenks":"3","Tier":8},{"Player":"Andy Pages (LAD - LF,CF,RF)","POS":"OF","POSRANK":28,"Total_SGP":10.5892,"RSGP":3.7117,"HRSGP":2.8448,"RBISGP":4.1688,"SBSGP":0.9018,"OBPSGP":-1.038,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":72,"HR":23,"RBI":77,"SB":10,"OBP":0.304,"AB":525,"H":135,"BB":36,"Repl_SGP":11.2129,"VAR":-0.6237,"OverallRank":187,"label":"Andy Pages (LAD - LF,CF,RF) (OF) SGP: 10.59 | VAR: -0.62","Jenks":"3","Tier":8},{"Player":"Grant Taylor (CWS - RP)","POS":"RP","POSRANK":16,"Total_SGP":2.5887,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.3078,"QSSGP":0,"SVSGP":0.5671,"ERASGP":0.5842,"WHIPSGP":0.1296,"K":100,"QS":0,"SV":5,"IP":84.5,"ER":31,"ERA":3.27,"WHIP":1.19,"Hits":69,"Walks":32,"Repl_SGP":3.2506,"VAR":-0.6619,"OverallRank":188,"label":"Grant Taylor (CWS - RP) (RP) SGP: 2.59 | VAR: -0.66","Jenks":"3","Tier":8},{"Player":"Braxton Garrett (MIA - SP) MiLB","POS":"SP","POSRANK":85,"Total_SGP":2.4212,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.4385,"QSSGP":1.3521,"SVSGP":0,"ERASGP":-0.2442,"WHIPSGP":-0.1252,"K":110,"QS":10,"SV":0,"IP":122.6,"ER":54,"ERA":3.95,"WHIP":1.22,"Hits":121,"Walks":29,"Repl_SGP":3.1019,"VAR":-0.6807,"OverallRank":189,"label":"Braxton Garrett (MIA - SP) MiLB (SP) SGP: 2.42 | VAR: -0.68","Jenks":"3","Tier":8},{"Player":"Cody Ponce (TOR - SP,RP)","POS":"SP","POSRANK":63,"Total_SGP":2.4126,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9486,"QSSGP":1.4873,"SVSGP":0,"ERASGP":-0.5485,"WHIPSGP":-0.4748,"K":149,"QS":11,"SV":0,"IP":145,"ER":66,"ERA":4.07,"WHIP":1.25,"Hits":135,"Walks":46,"Repl_SGP":3.1019,"VAR":-0.6894,"OverallRank":190,"label":"Cody Ponce (TOR - SP,RP) (SP) SGP: 2.41 | VAR: -0.69","Jenks":"3","Tier":8},{"Player":"Bo Bichette (NYM - SS)","POS":"SS","POSRANK":8,"Total_SGP":11.3423,"RSGP":3.9695,"HRSGP":2.2264,"RBISGP":4.3312,"SBSGP":0.5411,"OBPSGP":0.2741,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":77,"HR":18,"RBI":80,"SB":6,"OBP":0.333,"AB":573,"H":164,"BB":40,"Repl_SGP":12.0377,"VAR":-0.6955,"OverallRank":191,"label":"Bo Bichette (NYM - SS) (SS) SGP: 11.34 | VAR: -0.7","Jenks":"3","Tier":8},{"Player":"Sandy Alcantara (MIA - SP)","POS":"SP","POSRANK":55,"Total_SGP":2.4018,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9486,"QSSGP":2.0281,"SVSGP":0,"ERASGP":-0.7176,"WHIPSGP":-0.8573,"K":149,"QS":15,"SV":0,"IP":179.5,"ER":82,"ERA":4.13,"WHIP":1.27,"Hits":174,"Walks":53,"Repl_SGP":3.1019,"VAR":-0.7001,"OverallRank":192,"label":"Sandy Alcantara (MIA - SP) (SP) SGP: 2.4 | VAR: -0.7","Jenks":"3","Tier":8},{"Player":"Robbie Ray (SF - SP)","POS":"SP","POSRANK":49,"Total_SGP":2.3805,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.3147,"QSSGP":2.0281,"SVSGP":0,"ERASGP":-0.9072,"WHIPSGP":-1.0552,"K":177,"QS":15,"SV":0,"IP":171.1,"ER":80,"ERA":4.19,"WHIP":1.28,"Hits":153,"Walks":66,"Repl_SGP":3.1019,"VAR":-0.7215,"OverallRank":193,"label":"Robbie Ray (SF - SP) (SP) SGP: 2.38 | VAR: -0.72","Jenks":"3","Tier":8},{"Player":"Otto Lopez (MIA - 2B,SS)","POS":"2B","POSRANK":15,"Total_SGP":8.985,"RSGP":3.2993,"HRSGP":1.4843,"RBISGP":3.3025,"SBSGP":1.4429,"OBPSGP":-0.544,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":64,"HR":12,"RBI":61,"SB":16,"OBP":0.315,"AB":525,"H":139,"BB":39,"Repl_SGP":9.7077,"VAR":-0.7227,"OverallRank":194,"label":"Otto Lopez (MIA - 2B,SS) (2B) SGP: 8.99 | VAR: -0.72","Jenks":"3","Tier":8},{"Player":"Andrew Abbott (CIN - SP)","POS":"SP","POSRANK":58,"Total_SGP":2.334,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9878,"QSSGP":1.8929,"SVSGP":0,"ERASGP":-0.8698,"WHIPSGP":-0.677,"K":152,"QS":14,"SV":0,"IP":167.1,"ER":78,"ERA":4.2,"WHIP":1.26,"Hits":158,"Walks":52,"Repl_SGP":3.1019,"VAR":-0.7679,"OverallRank":195,"label":"Andrew Abbott (CIN - SP) (SP) SGP: 2.33 | VAR: -0.77","Jenks":"3","Tier":8},{"Player":"Jose Soriano (LAA - SP)","POS":"SP","POSRANK":56,"Total_SGP":2.3282,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.027,"QSSGP":2.1633,"SVSGP":0,"ERASGP":0.0207,"WHIPSGP":-1.8829,"K":155,"QS":16,"SV":0,"IP":170.2,"ER":72,"ERA":3.82,"WHIP":1.34,"Hits":155,"Walks":72,"Repl_SGP":3.1019,"VAR":-0.7737,"OverallRank":196,"label":"Jose Soriano (LAA - SP) (SP) SGP: 2.33 | VAR: -0.77","Jenks":"3","Tier":8},{"Player":"Reynaldo Lopez (ATL - SP)","POS":"SP","POSRANK":73,"Total_SGP":2.3145,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.7393,"QSSGP":1.4873,"SVSGP":0,"ERASGP":-0.2563,"WHIPSGP":-0.6558,"K":133,"QS":11,"SV":0,"IP":131.8,"ER":58,"ERA":3.96,"WHIP":1.27,"Hits":121,"Walks":46,"Repl_SGP":3.1019,"VAR":-0.7874,"OverallRank":197,"label":"Reynaldo Lopez (ATL - SP) (SP) SGP: 2.31 | VAR: -0.79","Jenks":"3","Tier":8},{"Player":"Garrett Cleavinger (TB - RP)","POS":"RP","POSRANK":35,"Total_SGP":2.4625,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.0201,"QSSGP":0,"SVSGP":0.794,"ERASGP":0.333,"WHIPSGP":0.3154,"K":78,"QS":0,"SV":7,"IP":63.1,"ER":24,"ERA":3.41,"WHIP":1.15,"Hits":49,"Walks":24,"Repl_SGP":3.2506,"VAR":-0.7881,"OverallRank":198,"label":"Garrett Cleavinger (TB - RP) (RP) SGP: 2.46 | VAR: -0.79","Jenks":"3","Tier":8},{"Player":"Alejandro Kirk (TOR - C)","POS":"C","POSRANK":13,"Total_SGP":8.4192,"RSGP":2.6807,"HRSGP":1.7316,"RBISGP":3.3567,"SBSGP":0.0902,"OBPSGP":0.56,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":52,"HR":14,"RBI":62,"SB":1,"OBP":0.343,"AB":427,"H":115,"BB":47,"Repl_SGP":9.228,"VAR":-0.8088,"OverallRank":199,"label":"Alejandro Kirk (TOR - C) (C) SGP: 8.42 | VAR: -0.81","Jenks":"3","Tier":8},{"Player":"Cade Horton (CHC - SP)","POS":"SP","POSRANK":87,"Total_SGP":2.2261,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.4778,"QSSGP":1.4873,"SVSGP":0,"ERASGP":-0.3746,"WHIPSGP":-0.3643,"K":113,"QS":11,"SV":0,"IP":129.5,"ER":58,"ERA":4.04,"WHIP":1.25,"Hits":118,"Walks":43,"Repl_SGP":3.1019,"VAR":-0.8758,"OverallRank":200,"label":"Cade Horton (CHC - SP) (SP) SGP: 2.23 | VAR: -0.88","Jenks":"3","Tier":8},{"Player":"Alec Bohm (PHI - 1B,3B)","POS":"3B","POSRANK":11,"Total_SGP":8.9811,"RSGP":3.2993,"HRSGP":1.7316,"RBISGP":3.8981,"SBSGP":0.2705,"OBPSGP":-0.2185,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":64,"HR":14,"RBI":72,"SB":3,"OBP":0.322,"AB":521,"H":143,"BB":37,"Repl_SGP":9.86,"VAR":-0.8789,"OverallRank":201,"label":"Alec Bohm (PHI - 1B,3B) (3B) SGP: 8.98 | VAR: -0.88","Jenks":"3","Tier":8},{"Player":"Carlos Correa (HOU - 3B,SS)","POS":"3B","POSRANK":14,"Total_SGP":8.9805,"RSGP":3.2993,"HRSGP":1.979,"RBISGP":3.5191,"SBSGP":0,"OBPSGP":0.1831,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":64,"HR":16,"RBI":65,"SB":0,"OBP":0.331,"AB":492,"H":131,"BB":48,"Repl_SGP":9.86,"VAR":-0.8795,"OverallRank":202,"label":"Carlos Correa (HOU - 3B,SS) (3B) SGP: 8.98 | VAR: -0.88","Jenks":"3","Tier":8},{"Player":"Trent Grisham (NYY - CF)","POS":"OF","POSRANK":59,"Total_SGP":10.3053,"RSGP":3.6602,"HRSGP":2.9685,"RBISGP":3.4108,"SBSGP":0.4509,"OBPSGP":-0.1851,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":71,"HR":24,"RBI":63,"SB":5,"OBP":0.323,"AB":447,"H":99,"BB":67,"Repl_SGP":11.2129,"VAR":-0.9077,"OverallRank":203,"label":"Trent Grisham (NYY - CF) (OF) SGP: 10.31 | VAR: -0.91","Jenks":"3","Tier":8},{"Player":"Michael Harris II (ATL - CF)","POS":"OF","POSRANK":24,"Total_SGP":10.2971,"RSGP":3.5055,"HRSGP":2.4738,"RBISGP":3.8981,"SBSGP":1.6232,"OBPSGP":-1.2035,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":68,"HR":20,"RBI":72,"SB":18,"OBP":0.302,"AB":533,"H":143,"BB":25,"Repl_SGP":11.2129,"VAR":-0.9158,"OverallRank":204,"label":"Michael Harris II (ATL - CF) (OF) SGP: 10.3 | VAR: -0.92","Jenks":"3","Tier":8},{"Player":"Luis Garcia (WSH - 2B)","POS":"2B","POSRANK":16,"Total_SGP":8.7506,"RSGP":2.99,"HRSGP":1.8553,"RBISGP":3.3567,"SBSGP":1.2625,"OBPSGP":-0.714,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":58,"HR":15,"RBI":62,"SB":14,"OBP":0.31,"AB":466,"H":125,"BB":28,"Repl_SGP":9.7077,"VAR":-0.9571,"OverallRank":205,"label":"Luis Garcia (WSH - 2B) (2B) SGP: 8.75 | VAR: -0.96","Jenks":"3","Tier":8},{"Player":"Brendan Donovan (SEA - 2B,SS,LF)","POS":"2B","POSRANK":20,"Total_SGP":8.7178,"RSGP":3.454,"HRSGP":1.4843,"RBISGP":3.086,"SBSGP":0.4509,"OBPSGP":0.2427,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":67,"HR":12,"RBI":57,"SB":5,"OBP":0.333,"AB":502,"H":135,"BB":48,"Repl_SGP":9.7077,"VAR":-0.9899,"OverallRank":206,"label":"Brendan Donovan (SEA - 2B,SS,LF) (2B) SGP: 8.72 | VAR: -0.99","Jenks":"3","Tier":8},{"Player":"Ian Seymour (TB - SP,RP)","POS":"SP","POSRANK":100,"Total_SGP":2.1026,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.4385,"QSSGP":1.0817,"SVSGP":0,"ERASGP":-0.3583,"WHIPSGP":-0.0593,"K":110,"QS":8,"SV":0,"IP":113.3,"ER":51,"ERA":4.04,"WHIP":1.22,"Hits":103,"Walks":35,"Repl_SGP":3.1019,"VAR":-0.9994,"OverallRank":207,"label":"Ian Seymour (TB - SP,RP) (SP) SGP: 2.1 | VAR: -1","Jenks":"3","Tier":8},{"Player":"Bryan Reynolds (PIT - LF,CF,RF,DH)","POS":"OF","POSRANK":42,"Total_SGP":10.1899,"RSGP":3.7633,"HRSGP":2.3501,"RBISGP":4.0063,"SBSGP":0.4509,"OBPSGP":-0.3807,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":73,"HR":19,"RBI":74,"SB":5,"OBP":0.32,"AB":564,"H":143,"BB":55,"Repl_SGP":11.2129,"VAR":-1.023,"OverallRank":208,"label":"Bryan Reynolds (PIT - LF,CF,RF,DH) (OF) SGP: 10.19 | VAR: -1.02","Jenks":"3","Tier":8},{"Player":"Heliot Ramos (SF - LF,CF,RF)","POS":"OF","POSRANK":39,"Total_SGP":10.1577,"RSGP":3.8148,"HRSGP":2.5975,"RBISGP":3.9522,"SBSGP":0.5411,"OBPSGP":-0.7478,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":74,"HR":21,"RBI":73,"SB":6,"OBP":0.312,"AB":550,"H":140,"BB":46,"Repl_SGP":11.2129,"VAR":-1.0552,"OverallRank":209,"label":"Heliot Ramos (SF - LF,CF,RF) (OF) SGP: 10.16 | VAR: -1.06","Jenks":"3","Tier":8},{"Player":"Garrett Whitlock (BOS - RP)","POS":"RP","POSRANK":37,"Total_SGP":2.1848,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.9808,"QSSGP":0,"SVSGP":0.3403,"ERASGP":0.4633,"WHIPSGP":0.4004,"K":75,"QS":0,"SV":3,"IP":68,"ER":25,"ERA":3.33,"WHIP":1.15,"Hits":59,"Walks":19,"Repl_SGP":3.2506,"VAR":-1.0658,"OverallRank":210,"label":"Garrett Whitlock (BOS - RP) (RP) SGP: 2.18 | VAR: -1.07","Jenks":"3","Tier":8},{"Player":"Royce Lewis (MIN - 3B)","POS":"3B","POSRANK":16,"Total_SGP":8.7861,"RSGP":2.9385,"HRSGP":2.3501,"RBISGP":3.5191,"SBSGP":0.992,"OBPSGP":-1.0135,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":57,"HR":19,"RBI":65,"SB":11,"OBP":0.302,"AB":459,"H":113,"BB":37,"Repl_SGP":9.86,"VAR":-1.0739,"OverallRank":211,"label":"Royce Lewis (MIN - 3B) (3B) SGP: 8.79 | VAR: -1.07","Jenks":"3","Tier":8},{"Player":"Jeremiah Estrada (SD - RP)","POS":"RP","POSRANK":34,"Total_SGP":2.1642,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.2031,"QSSGP":0,"SVSGP":0.1134,"ERASGP":0.4582,"WHIPSGP":0.3894,"K":92,"QS":0,"SV":1,"IP":67.9,"ER":25,"ERA":3.36,"WHIP":1.15,"Hits":51,"Walks":27,"Repl_SGP":3.2506,"VAR":-1.0864,"OverallRank":212,"label":"Jeremiah Estrada (SD - RP) (RP) SGP: 2.16 | VAR: -1.09","Jenks":"3","Tier":8},{"Player":"Trevor Rogers (BAL - SP)","POS":"SP","POSRANK":76,"Total_SGP":2.0143,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.6347,"QSSGP":1.7577,"SVSGP":0,"ERASGP":-0.4631,"WHIPSGP":-0.9151,"K":125,"QS":13,"SV":0,"IP":144.3,"ER":65,"ERA":4.07,"WHIP":1.28,"Hits":138,"Walks":47,"Repl_SGP":3.1019,"VAR":-1.0876,"OverallRank":213,"label":"Trevor Rogers (BAL - SP) (SP) SGP: 2.01 | VAR: -1.09","Jenks":"3","Tier":8},{"Player":"Shane Baz (BAL - SP)","POS":"SP","POSRANK":67,"Total_SGP":2.0089,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9486,"QSSGP":1.7577,"SVSGP":0,"ERASGP":-0.801,"WHIPSGP":-0.8964,"K":149,"QS":13,"SV":0,"IP":151.9,"ER":71,"ERA":4.2,"WHIP":1.27,"Hits":140,"Walks":54,"Repl_SGP":3.1019,"VAR":-1.093,"OverallRank":214,"label":"Shane Baz (BAL - SP) (SP) SGP: 2.01 | VAR: -1.09","Jenks":"3","Tier":8},{"Player":"Luis Arraez (SF - 1B,2B,DH)","POS":"2B","POSRANK":9,"Total_SGP":8.6041,"RSGP":3.6086,"HRSGP":0.6184,"RBISGP":3.0318,"SBSGP":0.7214,"OBPSGP":0.6238,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":70,"HR":5,"RBI":56,"SB":8,"OBP":0.34,"AB":568,"H":172,"BB":32,"Repl_SGP":9.7077,"VAR":-1.1036,"OverallRank":215,"label":"Luis Arraez (SF - 1B,2B,DH) (2B) SGP: 8.6 | VAR: -1.1","Jenks":"3","Tier":8},{"Player":"Alec Burleson (STL - 1B,LF,RF,DH)","POS":"OF","POSRANK":36,"Total_SGP":10.1038,"RSGP":3.3509,"HRSGP":2.4738,"RBISGP":3.9522,"SBSGP":0.5411,"OBPSGP":-0.2141,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":65,"HR":20,"RBI":73,"SB":6,"OBP":0.323,"AB":527,"H":143,"BB":40,"Repl_SGP":11.2129,"VAR":-1.1091,"OverallRank":216,"label":"Alec Burleson (STL - 1B,LF,RF,DH) (OF) SGP: 10.1 | VAR: -1.11","Jenks":"3","Tier":8},{"Player":"Yainer Diaz (HOU - C,DH)","POS":"C","POSRANK":10,"Total_SGP":8.1052,"RSGP":2.99,"HRSGP":2.3501,"RBISGP":3.6815,"SBSGP":0.0902,"OBPSGP":-1.0065,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":58,"HR":19,"RBI":68,"SB":1,"OBP":0.303,"AB":489,"H":133,"BB":22,"Repl_SGP":9.228,"VAR":-1.1228,"OverallRank":217,"label":"Yainer Diaz (HOU - C,DH) (C) SGP: 8.11 | VAR: -1.12","Jenks":"3","Tier":8},{"Player":"Cam Schlittler (NYY - SP)","POS":"SP","POSRANK":84,"Total_SGP":1.962,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.6609,"QSSGP":1.4873,"SVSGP":0,"ERASGP":-0.3767,"WHIPSGP":-0.8094,"K":127,"QS":11,"SV":0,"IP":127.1,"ER":57,"ERA":4.01,"WHIP":1.28,"Hits":114,"Walks":49,"Repl_SGP":3.1019,"VAR":-1.1399,"OverallRank":218,"label":"Cam Schlittler (NYY - SP) (SP) SGP: 1.96 | VAR: -1.14","Jenks":"3","Tier":8},{"Player":"Ryne Nelson (ARI - SP,RP)","POS":"SP","POSRANK":72,"Total_SGP":1.9586,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.687,"QSSGP":1.7577,"SVSGP":0,"ERASGP":-0.8125,"WHIPSGP":-0.6736,"K":129,"QS":13,"SV":0,"IP":156.4,"ER":73,"ERA":4.19,"WHIP":1.26,"Hits":154,"Walks":43,"Repl_SGP":3.1019,"VAR":-1.1433,"OverallRank":219,"label":"Ryne Nelson (ARI - SP,RP) (SP) SGP: 1.96 | VAR: -1.14","Jenks":"3","Tier":8},{"Player":"Zebby Matthews (MIN - SP) MiLB","POS":"SP","POSRANK":97,"Total_SGP":1.9454,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.4908,"QSSGP":1.2169,"SVSGP":0,"ERASGP":-0.4312,"WHIPSGP":-0.3311,"K":114,"QS":9,"SV":0,"IP":116.6,"ER":53,"ERA":4.1,"WHIP":1.24,"Hits":115,"Walks":30,"Repl_SGP":3.1019,"VAR":-1.1565,"OverallRank":220,"label":"Zebby Matthews (MIN - SP) MiLB (SP) SGP: 1.95 | VAR: -1.16","Jenks":"3","Tier":8},{"Player":"Mike Burrows (HOU - SP,RP)","POS":"SP","POSRANK":88,"Total_SGP":1.9366,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.7132,"QSSGP":1.3521,"SVSGP":0,"ERASGP":-0.5196,"WHIPSGP":-0.609,"K":131,"QS":10,"SV":0,"IP":131.4,"ER":60,"ERA":4.14,"WHIP":1.26,"Hits":121,"Walks":45,"Repl_SGP":3.1019,"VAR":-1.1653,"OverallRank":221,"label":"Mike Burrows (HOU - SP,RP) (SP) SGP: 1.94 | VAR: -1.17","Jenks":"3","Tier":8},{"Player":"Casey Mize (DET - SP)","POS":"SP","POSRANK":74,"Total_SGP":1.9332,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.6347,"QSSGP":1.6225,"SVSGP":0,"ERASGP":-0.6154,"WHIPSGP":-0.7086,"K":125,"QS":12,"SV":0,"IP":143.7,"ER":66,"ERA":4.13,"WHIP":1.26,"Hits":142,"Walks":40,"Repl_SGP":3.1019,"VAR":-1.1688,"OverallRank":222,"label":"Casey Mize (DET - SP) (SP) SGP: 1.93 | VAR: -1.17","Jenks":"3","Tier":8},{"Player":"Wilyer Abreu (BOS - LF,CF,RF)","POS":"OF","POSRANK":51,"Total_SGP":10.0385,"RSGP":3.1962,"HRSGP":2.4738,"RBISGP":3.6815,"SBSGP":0.7214,"OBPSGP":-0.0344,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":62,"HR":20,"RBI":68,"SB":8,"OBP":0.326,"AB":436,"H":108,"BB":51,"Repl_SGP":11.2129,"VAR":-1.1744,"OverallRank":223,"label":"Wilyer Abreu (BOS - LF,CF,RF) (OF) SGP: 10.04 | VAR: -1.17","Jenks":"3","Tier":8},{"Player":"Colt Keith (DET - 1B,2B,3B,DH)","POS":"2B","POSRANK":25,"Total_SGP":8.5111,"RSGP":3.2478,"HRSGP":1.8553,"RBISGP":3.1942,"SBSGP":0.2705,"OBPSGP":-0.0568,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":63,"HR":15,"RBI":59,"SB":3,"OBP":0.327,"AB":453,"H":118,"BB":44,"Repl_SGP":9.7077,"VAR":-1.1966,"OverallRank":224,"label":"Colt Keith (DET - 1B,2B,3B,DH) (2B) SGP: 8.51 | VAR: -1.2","Jenks":"3","Tier":8},{"Player":"Jeremy Pena (HOU - SS)","POS":"SS","POSRANK":12,"Total_SGP":10.8387,"RSGP":3.9179,"HRSGP":2.1027,"RBISGP":3.6815,"SBSGP":1.5331,"OBPSGP":-0.3965,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":76,"HR":17,"RBI":68,"SB":17,"OBP":0.317,"AB":550,"H":151,"BB":36,"Repl_SGP":12.0377,"VAR":-1.1991,"OverallRank":225,"label":"Jeremy Pena (HOU - SS) (SS) SGP: 10.84 | VAR: -1.2","Jenks":"3","Tier":8},{"Player":"Shane Smith (CWS - SP)","POS":"SP","POSRANK":77,"Total_SGP":1.8994,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9616,"QSSGP":1.7577,"SVSGP":0,"ERASGP":-0.8569,"WHIPSGP":-0.963,"K":150,"QS":13,"SV":0,"IP":157.9,"ER":74,"ERA":4.22,"WHIP":1.28,"Hits":143,"Walks":59,"Repl_SGP":3.1019,"VAR":-1.2025,"OverallRank":226,"label":"Shane Smith (CWS - SP) (SP) SGP: 1.9 | VAR: -1.2","Jenks":"3","Tier":8},{"Player":"Gabriel Moreno (ARI - C)","POS":"C","POSRANK":14,"Total_SGP":7.9984,"RSGP":2.6807,"HRSGP":1.3606,"RBISGP":2.9235,"SBSGP":0.3607,"OBPSGP":0.6729,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":52,"HR":11,"RBI":54,"SB":4,"OBP":0.346,"AB":386,"H":107,"BB":41,"Repl_SGP":9.228,"VAR":-1.2296,"OverallRank":227,"label":"Gabriel Moreno (ARI - C) (C) SGP: 8 | VAR: -1.23","Jenks":"3","Tier":8},{"Player":"Caleb Durbin (BOS - 2B,3B)","POS":"2B","POSRANK":21,"Total_SGP":8.4341,"RSGP":3.1447,"HRSGP":1.2369,"RBISGP":2.9235,"SBSGP":1.8938,"OBPSGP":-0.7648,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":61,"HR":10,"RBI":54,"SB":21,"OBP":0.308,"AB":467,"H":120,"BB":35,"Repl_SGP":9.7077,"VAR":-1.2736,"OverallRank":228,"label":"Caleb Durbin (BOS - 2B,3B) (2B) SGP: 8.43 | VAR: -1.27","Jenks":"2","Tier":9},{"Player":"Joey Cantillo (CLE - SP,RP)","POS":"SP","POSRANK":86,"Total_SGP":1.8095,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.8309,"QSSGP":1.2169,"SVSGP":0,"ERASGP":-0.1041,"WHIPSGP":-1.1341,"K":140,"QS":9,"SV":0,"IP":132.4,"ER":57,"ERA":3.89,"WHIP":1.31,"Hits":116,"Walks":57,"Repl_SGP":3.1019,"VAR":-1.2925,"OverallRank":229,"label":"Joey Cantillo (CLE - SP,RP) (SP) SGP: 1.81 | VAR: -1.29","Jenks":"2","Tier":9},{"Player":"Trevor Story (BOS - SS)","POS":"SS","POSRANK":15,"Total_SGP":10.7319,"RSGP":3.7633,"HRSGP":2.4738,"RBISGP":4.0063,"SBSGP":1.984,"OBPSGP":-1.4955,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":73,"HR":20,"RBI":74,"SB":22,"OBP":0.294,"AB":543,"H":136,"BB":35,"Repl_SGP":12.0377,"VAR":-1.3059,"OverallRank":230,"label":"Trevor Story (BOS - SS) (SS) SGP: 10.73 | VAR: -1.31","Jenks":"2","Tier":9},{"Player":"Addison Barger (TOR - 3B,LF,RF)","POS":"3B","POSRANK":20,"Total_SGP":8.524,"RSGP":3.1447,"HRSGP":2.3501,"RBISGP":3.5732,"SBSGP":0.3607,"OBPSGP":-0.9047,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":61,"HR":19,"RBI":66,"SB":4,"OBP":0.306,"AB":454,"H":110,"BB":41,"Repl_SGP":9.86,"VAR":-1.336,"OverallRank":231,"label":"Addison Barger (TOR - 3B,LF,RF) (3B) SGP: 8.52 | VAR: -1.34","Jenks":"2","Tier":9},{"Player":"JJ Wetherholt (STL - 2B,3B,SS) NRI","POS":"2B","POSRANK":29,"Total_SGP":8.3303,"RSGP":3.0931,"HRSGP":1.3606,"RBISGP":2.7611,"SBSGP":1.1723,"OBPSGP":-0.0568,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":60,"HR":11,"RBI":51,"SB":13,"OBP":0.324,"AB":447,"H":112,"BB":50,"Repl_SGP":9.7077,"VAR":-1.3774,"OverallRank":232,"label":"JJ Wetherholt (STL - 2B,3B,SS) NRI (2B) SGP: 8.33 | VAR: -1.38","Jenks":"2","Tier":9},{"Player":"David Peterson (NYM - SP)","POS":"SP","POSRANK":66,"Total_SGP":1.7194,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.8963,"QSSGP":2.0281,"SVSGP":0,"ERASGP":-0.2962,"WHIPSGP":-1.9088,"K":145,"QS":15,"SV":0,"IP":161.7,"ER":71,"ERA":3.94,"WHIP":1.34,"Hits":155,"Walks":62,"Repl_SGP":3.1019,"VAR":-1.3825,"OverallRank":233,"label":"David Peterson (NYM - SP) (SP) SGP: 1.72 | VAR: -1.38","Jenks":"2","Tier":9},{"Player":"Brandon Pfaadt (ARI - SP)","POS":"SP","POSRANK":69,"Total_SGP":1.718,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.8963,"QSSGP":1.8929,"SVSGP":0,"ERASGP":-1.2317,"WHIPSGP":-0.8395,"K":145,"QS":14,"SV":0,"IP":164.8,"ER":80,"ERA":4.38,"WHIP":1.26,"Hits":170,"Walks":39,"Repl_SGP":3.1019,"VAR":-1.384,"OverallRank":234,"label":"Brandon Pfaadt (ARI - SP) (SP) SGP: 1.72 | VAR: -1.38","Jenks":"2","Tier":9},{"Player":"Dansby Swanson (CHC - SS)","POS":"SS","POSRANK":18,"Total_SGP":10.6443,"RSGP":3.9179,"HRSGP":2.5975,"RBISGP":3.9522,"SBSGP":1.3527,"OBPSGP":-1.176,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":76,"HR":21,"RBI":73,"SB":15,"OBP":0.305,"AB":566,"H":136,"BB":52,"Repl_SGP":12.0377,"VAR":-1.3934,"OverallRank":235,"label":"Dansby Swanson (CHC - SS) (SS) SGP: 10.64 | VAR: -1.39","Jenks":"2","Tier":9},{"Player":"Adrian Morejon (SD - RP)","POS":"RP","POSRANK":38,"Total_SGP":1.8551,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":0.8762,"QSSGP":0,"SVSGP":0.3403,"ERASGP":0.3916,"WHIPSGP":0.247,"K":67,"QS":0,"SV":3,"IP":66.6,"ER":25,"ERA":3.33,"WHIP":1.18,"Hits":57,"Walks":21,"Repl_SGP":3.2506,"VAR":-1.3955,"OverallRank":236,"label":"Adrian Morejon (SD - RP) (RP) SGP: 1.86 | VAR: -1.4","Jenks":"2","Tier":9},{"Player":"Adolis Garcia (PHI - RF)","POS":"OF","POSRANK":43,"Total_SGP":9.8041,"RSGP":3.454,"HRSGP":2.9685,"RBISGP":4.2229,"SBSGP":0.992,"OBPSGP":-1.8333,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":67,"HR":24,"RBI":78,"SB":11,"OBP":0.288,"AB":519,"H":122,"BB":38,"Repl_SGP":11.2129,"VAR":-1.4089,"OverallRank":237,"label":"Adolis Garcia (PHI - RF) (OF) SGP: 9.8 | VAR: -1.41","Jenks":"2","Tier":9},{"Player":"Willi Castro (COL - 2B,3B,LF,RF)","POS":"2B","POSRANK":26,"Total_SGP":8.285,"RSGP":3.2993,"HRSGP":1.4843,"RBISGP":2.707,"SBSGP":1.2625,"OBPSGP":-0.4681,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":64,"HR":12,"RBI":50,"SB":14,"OBP":0.316,"AB":453,"H":115,"BB":41,"Repl_SGP":9.7077,"VAR":-1.4227,"OverallRank":238,"label":"Willi Castro (COL - 2B,3B,LF,RF) (2B) SGP: 8.29 | VAR: -1.42","Jenks":"2","Tier":9},{"Player":"Noelvi Marte (CIN - 3B,RF)","POS":"3B","POSRANK":15,"Total_SGP":8.4306,"RSGP":3.0931,"HRSGP":1.979,"RBISGP":3.1942,"SBSGP":1.2625,"OBPSGP":-1.0983,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":60,"HR":16,"RBI":59,"SB":14,"OBP":0.3,"AB":459,"H":116,"BB":31,"Repl_SGP":9.86,"VAR":-1.4294,"OverallRank":239,"label":"Noelvi Marte (CIN - 3B,RF) (3B) SGP: 8.43 | VAR: -1.43","Jenks":"2","Tier":9},{"Player":"Jonathan Aranda (TB - 1B)","POS":"1B","POSRANK":19,"Total_SGP":10.4792,"RSGP":3.5571,"HRSGP":2.4738,"RBISGP":3.8439,"SBSGP":0.0902,"OBPSGP":0.5143,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":69,"HR":20,"RBI":71,"SB":1,"OBP":0.338,"AB":490,"H":129,"BB":56,"Repl_SGP":11.9166,"VAR":-1.4374,"OverallRank":240,"label":"Jonathan Aranda (TB - 1B) (1B) SGP: 10.48 | VAR: -1.44","Jenks":"2","Tier":9},{"Player":"Braxton Ashcraft (PIT - SP,RP)","POS":"SP","POSRANK":93,"Total_SGP":1.6495,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.5562,"QSSGP":1.3521,"SVSGP":0,"ERASGP":-0.2512,"WHIPSGP":-1.0076,"K":119,"QS":10,"SV":0,"IP":131.9,"ER":58,"ERA":3.93,"WHIP":1.29,"Hits":129,"Walks":42,"Repl_SGP":3.1019,"VAR":-1.4525,"OverallRank":241,"label":"Braxton Ashcraft (PIT - SP,RP) (SP) SGP: 1.65 | VAR: -1.45","Jenks":"2","Tier":9},{"Player":"Willson Contreras (BOS - 1B)","POS":"1B","POSRANK":18,"Total_SGP":10.4118,"RSGP":3.5571,"HRSGP":2.5975,"RBISGP":4.0605,"SBSGP":0.4509,"OBPSGP":-0.2541,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":69,"HR":21,"RBI":75,"SB":5,"OBP":0.323,"AB":489,"H":122,"BB":52,"Repl_SGP":11.9166,"VAR":-1.5047,"OverallRank":242,"label":"Willson Contreras (BOS - 1B) (1B) SGP: 10.41 | VAR: -1.5","Jenks":"2","Tier":9},{"Player":"Kodai Senga (NYM - SP)","POS":"SP","POSRANK":91,"Total_SGP":1.5941,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.6085,"QSSGP":1.3521,"SVSGP":0,"ERASGP":-0.2442,"WHIPSGP":-1.1223,"K":123,"QS":10,"SV":0,"IP":122.6,"ER":54,"ERA":3.96,"WHIP":1.31,"Hits":107,"Walks":54,"Repl_SGP":3.1019,"VAR":-1.5078,"OverallRank":243,"label":"Kodai Senga (NYM - SP) (SP) SGP: 1.59 | VAR: -1.51","Jenks":"2","Tier":9},{"Player":"Mitch Keller (PIT - SP)","POS":"SP","POSRANK":65,"Total_SGP":1.5494,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.0139,"QSSGP":2.0281,"SVSGP":0,"ERASGP":-1.1471,"WHIPSGP":-1.3456,"K":154,"QS":15,"SV":0,"IP":175.9,"ER":84,"ERA":4.28,"WHIP":1.29,"Hits":175,"Walks":53,"Repl_SGP":3.1019,"VAR":-1.5526,"OverallRank":244,"label":"Mitch Keller (PIT - SP) (SP) SGP: 1.55 | VAR: -1.55","Jenks":"2","Tier":9},{"Player":"Chad Patrick (MIL - SP)","POS":"SP","POSRANK":96,"Total_SGP":1.5084,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.7393,"QSSGP":1.6225,"SVSGP":0,"ERASGP":-1.0074,"WHIPSGP":-0.846,"K":133,"QS":12,"SV":0,"IP":140.8,"ER":68,"ERA":4.34,"WHIP":1.28,"Hits":133,"Walks":47,"Repl_SGP":3.1019,"VAR":-1.5936,"OverallRank":245,"label":"Chad Patrick (MIL - SP) (SP) SGP: 1.51 | VAR: -1.59","Jenks":"2","Tier":9},{"Player":"Jameson Taillon (CHC - SP)","POS":"SP","POSRANK":89,"Total_SGP":1.5076,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.517,"QSSGP":1.6225,"SVSGP":0,"ERASGP":-1.2891,"WHIPSGP":-0.3428,"K":116,"QS":12,"SV":0,"IP":149.5,"ER":74,"ERA":4.44,"WHIP":1.24,"Hits":149,"Walks":36,"Repl_SGP":3.1019,"VAR":-1.5943,"OverallRank":246,"label":"Jameson Taillon (CHC - SP) (SP) SGP: 1.51 | VAR: -1.59","Jenks":"2","Tier":9},{"Player":"Ryan Jeffers (MIN - C,DH)","POS":"C","POSRANK":17,"Total_SGP":7.6167,"RSGP":2.8869,"HRSGP":1.8553,"RBISGP":3.086,"SBSGP":0.1804,"OBPSGP":-0.3919,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":56,"HR":15,"RBI":57,"SB":2,"OBP":0.317,"AB":436,"H":107,"BB":46,"Repl_SGP":9.228,"VAR":-1.6113,"OverallRank":247,"label":"Ryan Jeffers (MIN - C,DH) (C) SGP: 7.62 | VAR: -1.61","Jenks":"2","Tier":9},{"Player":"Daulton Varsho (TOR - LF,CF)","POS":"OF","POSRANK":48,"Total_SGP":9.5846,"RSGP":3.6086,"HRSGP":3.0922,"RBISGP":4.0063,"SBSGP":0.7214,"OBPSGP":-1.844,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":70,"HR":25,"RBI":74,"SB":8,"OBP":0.286,"AB":491,"H":110,"BB":42,"Repl_SGP":11.2129,"VAR":-1.6283,"OverallRank":248,"label":"Daulton Varsho (TOR - LF,CF) (OF) SGP: 9.58 | VAR: -1.63","Jenks":"2","Tier":9},{"Player":"Francisco Alvarez (NYM - C)","POS":"C","POSRANK":18,"Total_SGP":7.5837,"RSGP":2.5776,"HRSGP":2.4738,"RBISGP":3.086,"SBSGP":0.0902,"OBPSGP":-0.6438,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":50,"HR":20,"RBI":57,"SB":1,"OBP":0.306,"AB":373,"H":88,"BB":39,"Repl_SGP":9.228,"VAR":-1.6443,"OverallRank":249,"label":"Francisco Alvarez (NYM - C) (C) SGP: 7.58 | VAR: -1.64","Jenks":"2","Tier":9},{"Player":"Tyler Mahle (SF - SP)","POS":"SP","POSRANK":99,"Total_SGP":1.4445,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.4124,"QSSGP":1.4873,"SVSGP":0,"ERASGP":-0.5658,"WHIPSGP":-0.8894,"K":108,"QS":11,"SV":0,"IP":130.5,"ER":60,"ERA":4.12,"WHIP":1.28,"Hits":127,"Walks":41,"Repl_SGP":3.1019,"VAR":-1.6574,"OverallRank":250,"label":"Tyler Mahle (SF - SP) (SP) SGP: 1.44 | VAR: -1.66","Jenks":"2","Tier":9},{"Player":"Brady Singer (CIN - SP)","POS":"SP","POSRANK":70,"Total_SGP":1.4413,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.0532,"QSSGP":1.8929,"SVSGP":0,"ERASGP":-1.1629,"WHIPSGP":-1.3419,"K":157,"QS":14,"SV":0,"IP":168.5,"ER":81,"ERA":4.35,"WHIP":1.3,"Hits":164,"Walks":55,"Repl_SGP":3.1019,"VAR":-1.6606,"OverallRank":251,"label":"Brady Singer (CIN - SP) (SP) SGP: 1.44 | VAR: -1.66","Jenks":"2","Tier":9},{"Player":"Zach Eflin (BAL - SP)","POS":"SP","POSRANK":92,"Total_SGP":1.4331,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.4385,"QSSGP":1.4873,"SVSGP":0,"ERASGP":-1.0621,"WHIPSGP":-0.4307,"K":110,"QS":11,"SV":0,"IP":142.1,"ER":69,"ERA":4.39,"WHIP":1.24,"Hits":149,"Walks":28,"Repl_SGP":3.1019,"VAR":-1.6688,"OverallRank":252,"label":"Zach Eflin (BAL - SP) (SP) SGP: 1.43 | VAR: -1.67","Jenks":"2","Tier":9},{"Player":"Yusei Kikuchi (LAA - SP)","POS":"SP","POSRANK":75,"Total_SGP":1.4041,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":2.197,"QSSGP":1.8929,"SVSGP":0,"ERASGP":-0.9967,"WHIPSGP":-1.6892,"K":168,"QS":14,"SV":0,"IP":167,"ER":79,"ERA":4.27,"WHIP":1.32,"Hits":161,"Walks":60,"Repl_SGP":3.1019,"VAR":-1.6978,"OverallRank":253,"label":"Yusei Kikuchi (LAA - SP) (SP) SGP: 1.4 | VAR: -1.7","Jenks":"2","Tier":9},{"Player":"Dylan Crews (WSH - CF,RF) MiLB","POS":"OF","POSRANK":45,"Total_SGP":9.5118,"RSGP":3.4024,"HRSGP":1.979,"RBISGP":3.3567,"SBSGP":2.2545,"OBPSGP":-1.4808,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":66,"HR":16,"RBI":62,"SB":25,"OBP":0.294,"AB":510,"H":122,"BB":40,"Repl_SGP":11.2129,"VAR":-1.7011,"OverallRank":254,"label":"Dylan Crews (WSH - CF,RF) MiLB (OF) SGP: 9.51 | VAR: -1.7","Jenks":"2","Tier":9},{"Player":"Jack Leiter (TEX - SP)","POS":"SP","POSRANK":83,"Total_SGP":1.3701,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9224,"QSSGP":1.6225,"SVSGP":0,"ERASGP":-1.003,"WHIPSGP":-1.1718,"K":147,"QS":12,"SV":0,"IP":152.7,"ER":73,"ERA":4.3,"WHIP":1.3,"Hits":136,"Walks":62,"Repl_SGP":3.1019,"VAR":-1.7318,"OverallRank":255,"label":"Jack Leiter (TEX - SP) (SP) SGP: 1.37 | VAR: -1.73","Jenks":"2","Tier":9},{"Player":"Brenton Doyle (COL - CF)","POS":"OF","POSRANK":44,"Total_SGP":9.4717,"RSGP":3.4024,"HRSGP":2.2264,"RBISGP":3.4649,"SBSGP":1.8036,"OBPSGP":-1.4256,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":66,"HR":18,"RBI":64,"SB":20,"OBP":0.295,"AB":515,"H":127,"BB":36,"Repl_SGP":11.2129,"VAR":-1.7412,"OverallRank":256,"label":"Brenton Doyle (COL - CF) (OF) SGP: 9.47 | VAR: -1.74","Jenks":"2","Tier":9},{"Player":"Samuel Basallo (BAL - C)","POS":"C","POSRANK":16,"Total_SGP":7.4782,"RSGP":2.5776,"HRSGP":2.3501,"RBISGP":3.086,"SBSGP":0.2705,"OBPSGP":-0.806,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":50,"HR":19,"RBI":57,"SB":3,"OBP":0.304,"AB":381,"H":92,"BB":34,"Repl_SGP":9.228,"VAR":-1.7498,"OverallRank":257,"label":"Samuel Basallo (BAL - C) (C) SGP: 7.48 | VAR: -1.75","Jenks":"2","Tier":9},{"Player":"Jeff McNeil (ATH - 2B,LF,CF,RF)","POS":"2B","POSRANK":27,"Total_SGP":7.8938,"RSGP":3.1447,"HRSGP":1.4843,"RBISGP":3.1401,"SBSGP":0.3607,"OBPSGP":-0.2359,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":61,"HR":12,"RBI":58,"SB":4,"OBP":0.322,"AB":479,"H":125,"BB":43,"Repl_SGP":9.7077,"VAR":-1.8139,"OverallRank":258,"label":"Jeff McNeil (ATH - 2B,LF,CF,RF) (2B) SGP: 7.89 | VAR: -1.81","Jenks":"2","Tier":9},{"Player":"Bubba Chandler (PIT - SP)","POS":"SP","POSRANK":94,"Total_SGP":1.2492,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.7786,"QSSGP":1.4873,"SVSGP":0,"ERASGP":-0.7163,"WHIPSGP":-1.3003,"K":136,"QS":11,"SV":0,"IP":144.1,"ER":67,"ERA":4.19,"WHIP":1.31,"Hits":135,"Walks":54,"Repl_SGP":3.1019,"VAR":-1.8527,"OverallRank":259,"label":"Bubba Chandler (PIT - SP) (SP) SGP: 1.25 | VAR: -1.85","Jenks":"2","Tier":9},{"Player":"Noah Cameron (KC - SP)","POS":"SP","POSRANK":90,"Total_SGP":1.2453,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.6347,"QSSGP":1.7577,"SVSGP":0,"ERASGP":-0.8904,"WHIPSGP":-1.2567,"K":125,"QS":13,"SV":0,"IP":147.8,"ER":70,"ERA":4.25,"WHIP":1.3,"Hits":144,"Walks":49,"Repl_SGP":3.1019,"VAR":-1.8566,"OverallRank":260,"label":"Noah Cameron (KC - SP) (SP) SGP: 1.25 | VAR: -1.86","Jenks":"2","Tier":9},{"Player":"Clay Holmes (NYM - SP)","POS":"SP","POSRANK":79,"Total_SGP":1.2432,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.6216,"QSSGP":1.7577,"SVSGP":0,"ERASGP":-0.3199,"WHIPSGP":-1.8162,"K":124,"QS":13,"SV":0,"IP":151.8,"ER":67,"ERA":3.95,"WHIP":1.35,"Hits":147,"Walks":57,"Repl_SGP":3.1019,"VAR":-1.8587,"OverallRank":261,"label":"Clay Holmes (NYM - SP) (SP) SGP: 1.24 | VAR: -1.86","Jenks":"2","Tier":9},{"Player":"Michael Wacha (KC - SP)","POS":"SP","POSRANK":81,"Total_SGP":1.2154,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.687,"QSSGP":1.8929,"SVSGP":0,"ERASGP":-1.1802,"WHIPSGP":-1.1843,"K":129,"QS":14,"SV":0,"IP":165.8,"ER":80,"ERA":4.32,"WHIP":1.29,"Hits":165,"Walks":49,"Repl_SGP":3.1019,"VAR":-1.8865,"OverallRank":262,"label":"Michael Wacha (KC - SP) (SP) SGP: 1.22 | VAR: -1.89","Jenks":"2","Tier":9},{"Player":"Andres Gimenez (TOR - 2B,SS)","POS":"2B","POSRANK":24,"Total_SGP":7.7984,"RSGP":3.1962,"HRSGP":1.3606,"RBISGP":3.0318,"SBSGP":1.8036,"OBPSGP":-1.5938,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":62,"HR":11,"RBI":56,"SB":20,"OBP":0.292,"AB":510,"H":126,"BB":32,"Repl_SGP":9.7077,"VAR":-1.9093,"OverallRank":263,"label":"Andres Gimenez (TOR - 2B,SS) (2B) SGP: 7.8 | VAR: -1.91","Jenks":"2","Tier":9},{"Player":"TJ Friedl (CIN - LF,CF)","POS":"OF","POSRANK":60,"Total_SGP":9.2946,"RSGP":3.6602,"HRSGP":1.7316,"RBISGP":3.0318,"SBSGP":1.0822,"OBPSGP":-0.2112,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":71,"HR":14,"RBI":56,"SB":12,"OBP":0.323,"AB":513,"H":125,"BB":60,"Repl_SGP":11.2129,"VAR":-1.9183,"OverallRank":264,"label":"TJ Friedl (CIN - LF,CF) (OF) SGP: 9.29 | VAR: -1.92","Jenks":"2","Tier":9},{"Player":"Nolan Arenado (ARI - 3B)","POS":"3B","POSRANK":21,"Total_SGP":7.9255,"RSGP":3.0931,"HRSGP":1.979,"RBISGP":3.6815,"SBSGP":0.2705,"OBPSGP":-1.0987,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":60,"HR":16,"RBI":68,"SB":3,"OBP":0.304,"AB":510,"H":128,"BB":38,"Repl_SGP":9.86,"VAR":-1.9345,"OverallRank":265,"label":"Nolan Arenado (ARI - 3B) (3B) SGP: 7.93 | VAR: -1.93","Jenks":"2","Tier":9},{"Player":"Tatsuya Imai (HOU - SP)","POS":"SP","POSRANK":98,"Total_SGP":1.1252,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9486,"QSSGP":1.7577,"SVSGP":0,"ERASGP":-0.9419,"WHIPSGP":-1.6392,"K":149,"QS":13,"SV":0,"IP":146.8,"ER":70,"ERA":4.29,"WHIP":1.33,"Hits":133,"Walks":63,"Repl_SGP":3.1019,"VAR":-1.9767,"OverallRank":266,"label":"Tatsuya Imai (HOU - SP) (SP) SGP: 1.13 | VAR: -1.98","Jenks":"2","Tier":9},{"Player":"Jordan Beck (COL - LF,RF)","POS":"OF","POSRANK":52,"Total_SGP":9.2003,"RSGP":3.2478,"HRSGP":1.979,"RBISGP":3.3025,"SBSGP":1.4429,"OBPSGP":-0.7719,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":63,"HR":16,"RBI":61,"SB":16,"OBP":0.31,"AB":501,"H":125,"BB":44,"Repl_SGP":11.2129,"VAR":-2.0126,"OverallRank":267,"label":"Jordan Beck (COL - LF,RF) (OF) SGP: 9.2 | VAR: -2.01","Jenks":"2","Tier":9},{"Player":"Chris Bassitt (BAL - SP)","POS":"SP","POSRANK":78,"Total_SGP":1.0558,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9747,"QSSGP":1.8929,"SVSGP":0,"ERASGP":-1.0618,"WHIPSGP":-1.7501,"K":151,"QS":14,"SV":0,"IP":168.1,"ER":80,"ERA":4.3,"WHIP":1.32,"Hits":165,"Walks":58,"Repl_SGP":3.1019,"VAR":-2.0461,"OverallRank":268,"label":"Chris Bassitt (BAL - SP) (SP) SGP: 1.06 | VAR: -2.05","Jenks":"2","Tier":9},{"Player":"Jordan Westburg (BAL - 2B,3B)","POS":"2B","POSRANK":28,"Total_SGP":7.654,"RSGP":2.8869,"HRSGP":2.1027,"RBISGP":2.9235,"SBSGP":0.3607,"OBPSGP":-0.6198,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":56,"HR":17,"RBI":54,"SB":4,"OBP":0.308,"AB":379,"H":99,"BB":26,"Repl_SGP":9.7077,"VAR":-2.0537,"OverallRank":269,"label":"Jordan Westburg (BAL - 2B,3B) (2B) SGP: 7.65 | VAR: -2.05","Jenks":"2","Tier":9},{"Player":"Colton Cowser (BAL - LF,CF,RF)","POS":"OF","POSRANK":63,"Total_SGP":9.1412,"RSGP":3.1447,"HRSGP":2.3501,"RBISGP":3.3025,"SBSGP":1.1723,"OBPSGP":-0.8284,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":61,"HR":19,"RBI":61,"SB":13,"OBP":0.306,"AB":436,"H":101,"BB":47,"Repl_SGP":11.2129,"VAR":-2.0717,"OverallRank":270,"label":"Colton Cowser (BAL - LF,CF,RF) (OF) SGP: 9.14 | VAR: -2.07","Jenks":"2","Tier":9},{"Player":"J.T. Realmuto (PHI - C)","POS":"C","POSRANK":15,"Total_SGP":7.1211,"RSGP":2.8353,"HRSGP":1.7316,"RBISGP":2.9235,"SBSGP":0.6313,"OBPSGP":-1.0007,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":55,"HR":14,"RBI":54,"SB":7,"OBP":0.301,"AB":434,"H":109,"BB":31,"Repl_SGP":9.228,"VAR":-2.1069,"OverallRank":271,"label":"J.T. Realmuto (PHI - C) (C) SGP: 7.12 | VAR: -2.11","Jenks":"2","Tier":9},{"Player":"Matt Wallner (MIN - LF,RF)","POS":"OF","POSRANK":67,"Total_SGP":9.0572,"RSGP":3.0416,"HRSGP":2.7211,"RBISGP":3.4108,"SBSGP":0.4509,"OBPSGP":-0.5672,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":59,"HR":22,"RBI":63,"SB":5,"OBP":0.313,"AB":409,"H":94,"BB":49,"Repl_SGP":11.2129,"VAR":-2.1557,"OverallRank":272,"label":"Matt Wallner (MIN - LF,RF) (OF) SGP: 9.06 | VAR: -2.16","Jenks":"2","Tier":9},{"Player":"Kerry Carpenter (DET - LF,RF,DH)","POS":"OF","POSRANK":49,"Total_SGP":9.0422,"RSGP":3.1447,"HRSGP":2.8448,"RBISGP":3.7898,"SBSGP":0.1804,"OBPSGP":-0.9174,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":61,"HR":23,"RBI":70,"SB":2,"OBP":0.301,"AB":438,"H":112,"BB":30,"Repl_SGP":11.2129,"VAR":-2.1707,"OverallRank":273,"label":"Kerry Carpenter (DET - LF,RF,DH) (OF) SGP: 9.04 | VAR: -2.17","Jenks":"2","Tier":9},{"Player":"Nolan Schanuel (LAA - 1B)","POS":"1B","POSRANK":27,"Total_SGP":9.731,"RSGP":3.5571,"HRSGP":1.6079,"RBISGP":3.1401,"SBSGP":0.5411,"OBPSGP":0.8848,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":69,"HR":13,"RBI":58,"SB":6,"OBP":0.346,"AB":510,"H":134,"BB":65,"Repl_SGP":11.9166,"VAR":-2.1856,"OverallRank":274,"label":"Nolan Schanuel (LAA - 1B) (1B) SGP: 9.73 | VAR: -2.19","Jenks":"2","Tier":9},{"Player":"Christian Walker (HOU - 1B)","POS":"1B","POSRANK":23,"Total_SGP":9.6464,"RSGP":3.454,"HRSGP":3.0922,"RBISGP":4.2229,"SBSGP":0.2705,"OBPSGP":-1.3932,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":67,"HR":25,"RBI":78,"SB":3,"OBP":0.296,"AB":515,"H":120,"BB":47,"Repl_SGP":11.9166,"VAR":-2.2702,"OverallRank":275,"label":"Christian Walker (HOU - 1B) (1B) SGP: 9.65 | VAR: -2.27","Jenks":"1","Tier":10},{"Player":"Ramon Laureano (SD - LF,CF,RF)","POS":"OF","POSRANK":53,"Total_SGP":8.9329,"RSGP":3.2993,"HRSGP":2.3501,"RBISGP":3.5191,"SBSGP":0.7214,"OBPSGP":-0.957,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":64,"HR":19,"RBI":65,"SB":8,"OBP":0.303,"AB":463,"H":115,"BB":37,"Repl_SGP":11.2129,"VAR":-2.28,"OverallRank":276,"label":"Ramon Laureano (SD - LF,CF,RF) (OF) SGP: 8.93 | VAR: -2.28","Jenks":"1","Tier":10},{"Player":"Austin Wells (NYY - C)","POS":"C","POSRANK":19,"Total_SGP":6.9077,"RSGP":2.526,"HRSGP":2.2264,"RBISGP":3.086,"SBSGP":0.3607,"OBPSGP":-1.2914,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":49,"HR":18,"RBI":57,"SB":4,"OBP":0.291,"AB":390,"H":87,"BB":37,"Repl_SGP":9.228,"VAR":-2.3203,"OverallRank":277,"label":"Austin Wells (NYY - C) (C) SGP: 6.91 | VAR: -2.32","Jenks":"1","Tier":10},{"Player":"Jacob Wilson (ATH - SS)","POS":"SS","POSRANK":16,"Total_SGP":9.672,"RSGP":3.6602,"HRSGP":1.4843,"RBISGP":3.6274,"SBSGP":0.5411,"OBPSGP":0.3592,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":71,"HR":12,"RBI":67,"SB":6,"OBP":0.336,"AB":533,"H":158,"BB":31,"Repl_SGP":12.0377,"VAR":-2.3657,"OverallRank":278,"label":"Jacob Wilson (ATH - SS) (SS) SGP: 9.67 | VAR: -2.37","Jenks":"1","Tier":10},{"Player":"Ezequiel Tovar (COL - SS)","POS":"SS","POSRANK":17,"Total_SGP":9.668,"RSGP":3.9179,"HRSGP":2.4738,"RBISGP":3.8981,"SBSGP":0.7214,"OBPSGP":-1.3432,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":76,"HR":20,"RBI":72,"SB":8,"OBP":0.3,"AB":581,"H":153,"BB":31,"Repl_SGP":12.0377,"VAR":-2.3697,"OverallRank":279,"label":"Ezequiel Tovar (COL - SS) (SS) SGP: 9.67 | VAR: -2.37","Jenks":"1","Tier":10},{"Player":"Mickey Moniak (COL - LF,CF,RF)","POS":"OF","POSRANK":47,"Total_SGP":8.8399,"RSGP":3.0931,"HRSGP":2.4738,"RBISGP":3.4649,"SBSGP":0.8116,"OBPSGP":-1.0035,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":60,"HR":20,"RBI":64,"SB":9,"OBP":0.3,"AB":435,"H":114,"BB":24,"Repl_SGP":11.2129,"VAR":-2.373,"OverallRank":280,"label":"Mickey Moniak (COL - LF,CF,RF) (OF) SGP: 8.84 | VAR: -2.37","Jenks":"1","Tier":10},{"Player":"Xander Bogaerts (SD - SS)","POS":"SS","POSRANK":21,"Total_SGP":9.6455,"RSGP":3.5055,"HRSGP":1.6079,"RBISGP":3.1942,"SBSGP":1.4429,"OBPSGP":-0.1051,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":68,"HR":13,"RBI":59,"SB":16,"OBP":0.325,"AB":519,"H":137,"BB":47,"Repl_SGP":12.0377,"VAR":-2.3922,"OverallRank":281,"label":"Xander Bogaerts (SD - SS) (SS) SGP: 9.65 | VAR: -2.39","Jenks":"1","Tier":10},{"Player":"Brayan Bello (BOS - SP)","POS":"SP","POSRANK":95,"Total_SGP":0.6641,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.6739,"QSSGP":1.7577,"SVSGP":0,"ERASGP":-0.8981,"WHIPSGP":-1.8694,"K":128,"QS":13,"SV":0,"IP":157.1,"ER":74,"ERA":4.26,"WHIP":1.34,"Hits":156,"Walks":55,"Repl_SGP":3.1019,"VAR":-2.4378,"OverallRank":282,"label":"Brayan Bello (BOS - SP) (SP) SGP: 0.66 | VAR: -2.44","Jenks":"1","Tier":10},{"Player":"Mark Vientos (NYM - 3B,DH)","POS":"3B","POSRANK":28,"Total_SGP":7.4134,"RSGP":2.6807,"HRSGP":2.3501,"RBISGP":3.3567,"SBSGP":0.0902,"OBPSGP":-1.0642,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":52,"HR":19,"RBI":62,"SB":1,"OBP":0.299,"AB":413,"H":100,"BB":33,"Repl_SGP":9.86,"VAR":-2.4466,"OverallRank":283,"label":"Mark Vientos (NYM - 3B,DH) (3B) SGP: 7.41 | VAR: -2.45","Jenks":"1","Tier":10},{"Player":"Daylen Lile (WSH - LF,RF)","POS":"OF","POSRANK":50,"Total_SGP":8.7439,"RSGP":3.4024,"HRSGP":1.3606,"RBISGP":3.2484,"SBSGP":1.2625,"OBPSGP":-0.53,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":66,"HR":11,"RBI":60,"SB":14,"OBP":0.315,"AB":500,"H":133,"BB":36,"Repl_SGP":11.2129,"VAR":-2.469,"OverallRank":284,"label":"Daylen Lile (WSH - LF,RF) (OF) SGP: 8.74 | VAR: -2.47","Jenks":"1","Tier":10},{"Player":"Ernie Clement (TOR - 1B,2B,3B,SS)","POS":"2B","POSRANK":22,"Total_SGP":7.2147,"RSGP":3.3509,"HRSGP":1.2369,"RBISGP":3.1401,"SBSGP":0.7214,"OBPSGP":-1.2346,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":65,"HR":10,"RBI":58,"SB":8,"OBP":0.299,"AB":525,"H":140,"BB":25,"Repl_SGP":9.7077,"VAR":-2.493,"OverallRank":285,"label":"Ernie Clement (TOR - 1B,2B,3B,SS) (2B) SGP: 7.21 | VAR: -2.49","Jenks":"1","Tier":10},{"Player":"Sal Stewart (CIN - 1B)","POS":"1B","POSRANK":24,"Total_SGP":9.3491,"RSGP":3.0931,"HRSGP":2.2264,"RBISGP":3.5191,"SBSGP":0.6313,"OBPSGP":-0.1207,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":60,"HR":18,"RBI":65,"SB":7,"OBP":0.325,"AB":440,"H":117,"BB":38,"Repl_SGP":11.9166,"VAR":-2.5675,"OverallRank":286,"label":"Sal Stewart (CIN - 1B) (1B) SGP: 9.35 | VAR: -2.57","Jenks":"1","Tier":10},{"Player":"Ryan O'Hearn (PIT - 1B,LF,RF,DH)","POS":"OF","POSRANK":65,"Total_SGP":8.5898,"RSGP":3.1447,"HRSGP":1.7316,"RBISGP":3.1942,"SBSGP":0.2705,"OBPSGP":0.2487,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":61,"HR":14,"RBI":59,"SB":3,"OBP":0.333,"AB":460,"H":122,"BB":47,"Repl_SGP":11.2129,"VAR":-2.6231,"OverallRank":287,"label":"Ryan O'Hearn (PIT - 1B,LF,RF,DH) (OF) SGP: 8.59 | VAR: -2.62","Jenks":"1","Tier":10},{"Player":"Connor Norby (MIA - 3B)","POS":"3B","POSRANK":30,"Total_SGP":7.1901,"RSGP":2.8869,"HRSGP":1.7316,"RBISGP":2.8694,"SBSGP":0.8116,"OBPSGP":-1.1095,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":56,"HR":14,"RBI":53,"SB":9,"OBP":0.298,"AB":433,"H":106,"BB":33,"Repl_SGP":9.86,"VAR":-2.6699,"OverallRank":288,"label":"Connor Norby (MIA - 3B) (3B) SGP: 7.19 | VAR: -2.67","Jenks":"1","Tier":10},{"Player":"Josh Bell (MIN - 1B,DH)","POS":"1B","POSRANK":30,"Total_SGP":9.2441,"RSGP":3.1447,"HRSGP":2.4738,"RBISGP":3.5732,"SBSGP":0.0902,"OBPSGP":-0.0377,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":61,"HR":20,"RBI":66,"SB":1,"OBP":0.327,"AB":480,"H":119,"BB":56,"Repl_SGP":11.9166,"VAR":-2.6725,"OverallRank":289,"label":"Josh Bell (MIN - 1B,DH) (1B) SGP: 9.24 | VAR: -2.67","Jenks":"1","Tier":10},{"Player":"Josh Jung (TEX - 3B)","POS":"3B","POSRANK":26,"Total_SGP":7.1534,"RSGP":2.8869,"HRSGP":2.1027,"RBISGP":3.3567,"SBSGP":0.3607,"OBPSGP":-1.5536,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":56,"HR":17,"RBI":62,"SB":4,"OBP":0.29,"AB":481,"H":119,"BB":29,"Repl_SGP":9.86,"VAR":-2.7066,"OverallRank":290,"label":"Josh Jung (TEX - 3B) (3B) SGP: 7.15 | VAR: -2.71","Jenks":"1","Tier":10},{"Player":"Jung Hoo Lee (SF - CF)","POS":"OF","POSRANK":56,"Total_SGP":8.4425,"RSGP":3.4024,"HRSGP":1.1132,"RBISGP":3.086,"SBSGP":0.8116,"OBPSGP":0.0293,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":66,"HR":9,"RBI":57,"SB":9,"OBP":0.327,"AB":517,"H":140,"BB":44,"Repl_SGP":11.2129,"VAR":-2.7704,"OverallRank":291,"label":"Jung Hoo Lee (SF - CF) (OF) SGP: 8.44 | VAR: -2.77","Jenks":"1","Tier":10},{"Player":"Reid Detmers (LAA - RP)","POS":"RP","POSRANK":15,"Total_SGP":0.4284,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.9616,"QSSGP":0,"SVSGP":0,"ERASGP":-0.748,"WHIPSGP":-0.7852,"K":150,"QS":0,"SV":0,"IP":136.4,"ER":64,"ERA":4.2,"WHIP":1.28,"Hits":124,"Walks":50,"Repl_SGP":3.2506,"VAR":-2.8222,"OverallRank":292,"label":"Reid Detmers (LAA - RP) (RP) SGP: 0.43 | VAR: -2.82","Jenks":"1","Tier":10},{"Player":"Sal Frelick (MIL - LF,CF,RF)","POS":"OF","POSRANK":61,"Total_SGP":8.3684,"RSGP":3.2478,"HRSGP":0.9895,"RBISGP":2.8153,"SBSGP":1.4429,"OBPSGP":-0.1271,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":63,"HR":8,"RBI":52,"SB":16,"OBP":0.325,"AB":479,"H":127,"BB":42,"Repl_SGP":11.2129,"VAR":-2.8446,"OverallRank":293,"label":"Sal Frelick (MIL - LF,CF,RF) (OF) SGP: 8.37 | VAR: -2.84","Jenks":"1","Tier":10},{"Player":"Brooks Lee (MIN - 2B,3B,SS)","POS":"2B","POSRANK":30,"Total_SGP":6.8221,"RSGP":2.8869,"HRSGP":1.7316,"RBISGP":3.2484,"SBSGP":0.3607,"OBPSGP":-1.4055,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":56,"HR":14,"RBI":60,"SB":4,"OBP":0.295,"AB":500,"H":123,"BB":35,"Repl_SGP":9.7077,"VAR":-2.8856,"OverallRank":294,"label":"Brooks Lee (MIN - 2B,3B,SS) (2B) SGP: 6.82 | VAR: -2.89","Jenks":"1","Tier":10},{"Player":"Josh Lowe (LAA - LF,CF,RF)","POS":"OF","POSRANK":69,"Total_SGP":8.3024,"RSGP":2.8869,"HRSGP":1.7316,"RBISGP":2.7611,"SBSGP":1.8938,"OBPSGP":-0.9711,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":56,"HR":14,"RBI":51,"SB":21,"OBP":0.302,"AB":432,"H":104,"BB":38,"Repl_SGP":11.2129,"VAR":-2.9105,"OverallRank":295,"label":"Josh Lowe (LAA - LF,CF,RF) (OF) SGP: 8.3 | VAR: -2.91","Jenks":"1","Tier":10},{"Player":"Chandler Simpson (TB - LF,CF)","POS":"OF","POSRANK":58,"Total_SGP":8.28,"RSGP":2.7838,"HRSGP":0.1237,"RBISGP":1.7866,"SBSGP":3.6974,"OBPSGP":-0.1115,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":54,"HR":1,"RBI":33,"SB":41,"OBP":0.325,"AB":416,"H":118,"BB":25,"Repl_SGP":11.2129,"VAR":-2.9329,"OverallRank":296,"label":"Chandler Simpson (TB - LF,CF) (OF) SGP: 8.28 | VAR: -2.93","Jenks":"1","Tier":10},{"Player":"Konnor Griffin (PIT - SS,CF) NRI","POS":"OF","POSRANK":62,"Total_SGP":8.2291,"RSGP":2.99,"HRSGP":1.3606,"RBISGP":2.7611,"SBSGP":1.8938,"OBPSGP":-0.7763,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":58,"HR":11,"RBI":51,"SB":21,"OBP":0.303,"AB":393,"H":101,"BB":27,"Repl_SGP":11.2129,"VAR":-2.9838,"OverallRank":297,"label":"Konnor Griffin (PIT - SS,CF) NRI (OF) SGP: 8.23 | VAR: -2.98","Jenks":"1","Tier":10},{"Player":"Foster Griffin (WSH - RP)","POS":"RP","POSRANK":28,"Total_SGP":0.2615,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.6085,"QSSGP":0,"SVSGP":0,"ERASGP":-0.6389,"WHIPSGP":-0.7081,"K":123,"QS":0,"SV":0,"IP":133.8,"ER":62,"ERA":4.15,"WHIP":1.28,"Hits":128,"Walks":42,"Repl_SGP":3.2506,"VAR":-2.989,"OverallRank":298,"label":"Foster Griffin (WSH - RP) (RP) SGP: 0.26 | VAR: -2.99","Jenks":"1","Tier":10},{"Player":"Jake Burger (TEX - 1B)","POS":"1B","POSRANK":22,"Total_SGP":8.8573,"RSGP":3.2993,"HRSGP":3.2159,"RBISGP":4.1146,"SBSGP":0.1804,"OBPSGP":-1.9529,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":64,"HR":26,"RBI":76,"SB":2,"OBP":0.284,"AB":505,"H":122,"BB":29,"Repl_SGP":11.9166,"VAR":-3.0593,"OverallRank":299,"label":"Jake Burger (TEX - 1B) (1B) SGP: 8.86 | VAR: -3.06","Jenks":"1","Tier":10},{"Player":"Masyn Winn (STL - SS)","POS":"SS","POSRANK":22,"Total_SGP":8.9418,"RSGP":3.8148,"HRSGP":1.7316,"RBISGP":3.4649,"SBSGP":1.0822,"OBPSGP":-1.1518,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":74,"HR":14,"RBI":64,"SB":12,"OBP":0.305,"AB":569,"H":144,"BB":42,"Repl_SGP":12.0377,"VAR":-3.096,"OverallRank":300,"label":"Masyn Winn (STL - SS) (SS) SGP: 8.94 | VAR: -3.1","Jenks":"1","Tier":10},{"Player":"Steven Matz (TB - RP)","POS":"RP","POSRANK":40,"Total_SGP":0.1405,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.3731,"QSSGP":0,"SVSGP":0,"ERASGP":-0.536,"WHIPSGP":-0.6966,"K":105,"QS":0,"SV":0,"IP":124,"ER":57,"ERA":4.17,"WHIP":1.28,"Hits":124,"Walks":34,"Repl_SGP":3.2506,"VAR":-3.1101,"OverallRank":301,"label":"Steven Matz (TB - RP) (RP) SGP: 0.14 | VAR: -3.11","Jenks":"1","Tier":10},{"Player":"Jac Caglianone (KC - 1B,RF)","POS":"OF","POSRANK":68,"Total_SGP":8.0548,"RSGP":2.9385,"HRSGP":2.3501,"RBISGP":3.3567,"SBSGP":0.2705,"OBPSGP":-0.8609,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":57,"HR":19,"RBI":62,"SB":3,"OBP":0.305,"AB":435,"H":107,"BB":37,"Repl_SGP":11.2129,"VAR":-3.1581,"OverallRank":302,"label":"Jac Caglianone (KC - 1B,RF) (OF) SGP: 8.05 | VAR: -3.16","Jenks":"1","Tier":10},{"Player":"Logan O'Hoppe (LAA - C)","POS":"C","POSRANK":20,"Total_SGP":6.0317,"RSGP":2.4229,"HRSGP":2.2264,"RBISGP":2.8153,"SBSGP":0.1804,"OBPSGP":-1.6132,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":47,"HR":18,"RBI":52,"SB":2,"OBP":0.284,"AB":409,"H":94,"BB":30,"Repl_SGP":9.228,"VAR":-3.1963,"OverallRank":303,"label":"Logan O'Hoppe (LAA - C) (C) SGP: 6.03 | VAR: -3.2","Jenks":"1","Tier":10},{"Player":"Colson Montgomery (CWS - 3B,SS)","POS":"SS","POSRANK":29,"Total_SGP":8.759,"RSGP":3.4024,"HRSGP":2.9685,"RBISGP":3.9522,"SBSGP":0.2705,"OBPSGP":-1.8347,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":66,"HR":24,"RBI":73,"SB":3,"OBP":0.286,"AB":506,"H":111,"BB":48,"Repl_SGP":12.0377,"VAR":-3.2787,"OverallRank":304,"label":"Colson Montgomery (CWS - 3B,SS) (SS) SGP: 8.76 | VAR: -3.28","Jenks":"1","Tier":10},{"Player":"Andrew Vaughn (MIL - 1B)","POS":"1B","POSRANK":26,"Total_SGP":8.5476,"RSGP":3.0416,"HRSGP":2.3501,"RBISGP":3.9522,"SBSGP":0.0902,"OBPSGP":-0.8864,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":59,"HR":19,"RBI":73,"SB":1,"OBP":0.305,"AB":495,"H":125,"BB":39,"Repl_SGP":11.9166,"VAR":-3.369,"OverallRank":305,"label":"Andrew Vaughn (MIL - 1B) (1B) SGP: 8.55 | VAR: -3.37","Jenks":"1","Tier":10},{"Player":"Quinn Priester (MIL - SP,RP)","POS":"RP","POSRANK":30,"Total_SGP":-0.1424,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.4647,"QSSGP":0,"SVSGP":0,"ERASGP":-0.5772,"WHIPSGP":-1.0299,"K":112,"QS":0,"SV":0,"IP":135,"ER":62,"ERA":4.12,"WHIP":1.3,"Hits":131,"Walks":44,"Repl_SGP":3.2506,"VAR":-3.393,"OverallRank":306,"label":"Quinn Priester (MIL - SP,RP) (RP) SGP: -0.14 | VAR: -3.39","Jenks":"1","Tier":10},{"Player":"Kevin McGonigle (DET - SS) NRI","POS":"SS","POSRANK":30,"Total_SGP":8.4468,"RSGP":2.99,"HRSGP":1.6079,"RBISGP":2.8153,"SBSGP":0.8116,"OBPSGP":0.2219,"KSGP":0,"QSSGP":0,"SVSGP":0,"ERASGP":0,"WHIPSGP":0,"R":58,"HR":13,"RBI":52,"SB":9,"OBP":0.331,"AB":407,"H":105,"BB":46,"Repl_SGP":12.0377,"VAR":-3.5909,"OverallRank":307,"label":"Kevin McGonigle (DET - SS) NRI (SS) SGP: 8.45 | VAR: -3.59","Jenks":"1","Tier":10},{"Player":"Nick Martinez (TB - SP,RP)","POS":"RP","POSRANK":32,"Total_SGP":-0.3977,"RSGP":0,"HRSGP":0,"RBISGP":0,"SBSGP":0,"OBPSGP":0,"KSGP":1.4647,"QSSGP":0,"SVSGP":0,"ERASGP":-1.0601,"WHIPSGP":-0.8022,"K":112,"QS":0,"SV":0,"IP":144.5,"ER":70,"ERA":4.33,"WHIP":1.28,"Hits":145,"Walks":39,"Repl_SGP":3.2506,"VAR":-3.6483,"OverallRank":308,"label":"Nick Martinez (TB - SP,RP) (RP) SGP: -0.4 | VAR: -3.65"}];
+
+async function boot() {
+  ALL = Array.isArray(PLAYER_DATA) ? PLAYER_DATA : Object.values(PLAYER_DATA);
+  ALL.forEach(d => {
+    NUM_COLS.forEach(c => d[c] = +d[c] || 0);
+    d._id = d.Player;
+  });
+  // Compute SGP rank (sorted by Total_SGP desc)
+  [...ALL].sort((a,b) => b.Total_SGP - a.Total_SGP)
+    .forEach((d,i) => d.SGP_Rank = i + 1);
+  render(); setupControls();
+}
+
+function parseName(s) {
+  const m = s.match(/^(.+?)\s*\(([A-Z]+)\s*[-–]/);
+  return m ? { name: m[1].trim(), team: m[2] } : { name: s, team: '' };
+}
+
+function visible() {
+  return ALL
+    .filter(d => (showDrafted || !drafted.has(d._id)) && (posFil.size === 0 || posFil.has(d.POS)) && (!searchQ || d.Player.toLowerCase().includes(searchQ)))
+    .sort((a,b) => {
+      const dir = sortDir === 'desc' ? -1 : 1;
+      const av = a[sortCol], bv = b[sortCol];
+      return typeof av === 'number' ? dir*(av-bv) : dir*String(av).localeCompare(String(bv));
+    });
+}
+
+const COL_DEFS = {
+  sgp: [
+    { col:'Total_SGP', lbl:'SGP',  fmt: v => fN(v)         },
+    { col:'VAR',       lbl:'VAR',  fmt: v => fV(v)         },
+    { col:'RSGP',      lbl:'R',    fmt: v => fS(v)         },
+    { col:'HRSGP',     lbl:'HR',   fmt: v => fS(v)         },
+    { col:'RBISGP',    lbl:'RBI',  fmt: v => fS(v)         },
+    { col:'SBSGP',     lbl:'SB',   fmt: v => fS(v)         },
+    { col:'OBPSGP',    lbl:'OBP',  fmt: v => fS(v)         },
+    { col:'KSGP',      lbl:'K',    fmt: v => fS(v)         },
+    { col:'QSSGP',     lbl:'QS',   fmt: v => fS(v)         },
+    { col:'SVSGP',     lbl:'SV',   fmt: v => fS(v)         },
+    { col:'ERASGP',    lbl:'ERA',  fmt: v => fS(v)         },
+    { col:'WHIPSGP',   lbl:'WHIP', fmt: v => fS(v)         },
+  ],
+  raw: [
+    { col:'Total_SGP', lbl:'SGP',  fmt: v => fN(v)         },
+    { col:'VAR',       lbl:'VAR',  fmt: v => fV(v)         },
+    { col:'R',         lbl:'R',    fmt: v => fRaw(v)       },
+    { col:'HR',        lbl:'HR',   fmt: v => fRaw(v)       },
+    { col:'RBI',       lbl:'RBI',  fmt: v => fRaw(v)       },
+    { col:'SB',        lbl:'SB',   fmt: v => fRaw(v)       },
+    { col:'OBP',       lbl:'OBP',  fmt: v => fRatStat(v,3) },
+    { col:'K',         lbl:'K',    fmt: v => fRaw(v)       },
+    { col:'QS',        lbl:'QS',   fmt: v => fRaw(v)       },
+    { col:'SV',        lbl:'SV',   fmt: v => fRaw(v)       },
+    { col:'ERA',       lbl:'ERA',  fmt: v => fRatStat(v,2) },
+    { col:'WHIP',      lbl:'WHIP', fmt: v => fRatStat(v,2) },
+  ]
+};
+
+function renderHeader() {
+  const cols = showRawStats ? COL_DEFS.raw : COL_DEFS.sgp;
+  const tr = document.createElement('tr');
+  [
+    { html: 'SGP# <span class="si">↕</span>', cls: '', col: 'SGP_Rank' },
+    { html: 'VAR# <span class="si">↕</span>', cls: '', col: 'OverallRank' },
+    { html: 'Player <span class="si">↕</span>', cls: 'lft', col: 'Player' },
+    { html: 'Pos <span class="si">↕</span>',   cls: 'lft', col: 'POS'   },
+    { html: 'Tier <span class="si">↕</span>',  cls: '',    col: 'Tier'  },
+  ].forEach(({html, cls, col}) => {
+    const th = document.createElement('th');
+    th.innerHTML = html;
+    if (cls) th.className = cls;
+    if (col) {
+      th.dataset.col = col;
+      if (col === sortCol) {
+        th.classList.add('sa');
+        th.querySelector('.si').textContent = sortDir === 'desc' ? '↓' : '↑';
+      }
+    }
+    tr.appendChild(th);
+  });
+  cols.forEach(({col, lbl}) => {
+    const th = document.createElement('th');
+    const sorted = sortCol === col;
+    if (sorted) th.classList.add('sa');
+    th.dataset.col = col;
+    th.innerHTML = `${lbl} <span class="si">${sorted ? (sortDir==='desc'?'↓':'↑') : '↕'}</span>`;
+    tr.appendChild(th);
+  });
+  const thEnd = document.createElement('th');
+  thEnd.style.width = '70px';
+  tr.appendChild(thEnd);
+  const thead = document.getElementById('thead');
+  thead.innerHTML = '';
+  thead.appendChild(tr);
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+function render() {
+  updateStats(); renderScatters(); renderTable();
+}
+
+function updateStats() {
+  const avail = ALL.length - drafted.size;
+  document.getElementById('s-avail').textContent = avail;
+  document.getElementById('s-drafted').textContent = drafted.size;
+  document.getElementById('s-round').textContent = Math.floor(drafted.size/10)+1;
+  document.getElementById('c-drafted').textContent = drafted.size;
+  document.getElementById('c-avail').textContent = avail;
+}
+
+// ── Scatters ─────────────────────────────────────────────────────────────────
+const SM = { t:10, r:16, b:34, l:40 };
+
+function renderScatters() {
+  const ALL_POS = ['C','1B','2B','3B','SS','OF','UTIL','SP','RP'];
+  const fPos = posFil.size === 0 ? ALL_POS : [...posFil];
+  const fLbl = posFil.size === 0 ? 'All Players' : [...posFil].join(', ');
+  document.getElementById('lbl-f').textContent = fLbl + ' — Total SGP vs Value Above Replacement';
+  drawScatter('sv-f','leg-f', fPos);
+  drawScatter('sv-h','leg-h', HPOS);
+  drawScatter('sv-p','leg-p', PPOS);
+}
+
+function drawScatter(svgId, legId, positions) {
+  const panel = document.getElementById(svgId).parentElement;
+  const W = panel.clientWidth - 28, H = 280;
+  const pw = W - SM.l - SM.r, ph = H - SM.t - SM.b;
+  const DUR = 700;
+  const T = d3.transition().duration(DUR).ease(d3.easeSinInOut);
+
+  const svg = d3.select('#'+svgId).attr('width', W).attr('height', H);
+
+  // ── One-time structure init ──────────────────────────────────────────────
+  let g = svg.select('g.sc-root');
+  if (g.empty()) {
+    g = svg.append('g').attr('class','sc-root').attr('transform',`translate(${SM.l},${SM.t})`);
+    g.append('g').attr('class','sc-gx');
+    g.append('g').attr('class','sc-gy');
+    g.append('g').attr('class','sc-ax').attr('transform',`translate(0,${ph})`);
+    g.append('g').attr('class','sc-ay');
+    g.append('text').attr('class','sc-lx')
+      .attr('x',pw/2).attr('y',ph+28).attr('text-anchor','middle')
+      .attr('fill','#DCE8F5').attr('font-size',9)
+      .attr('font-family','Barlow Condensed,sans-serif').attr('letter-spacing','0.1em')
+      .text('TOTAL SGP');
+    g.append('text').attr('class','sc-ly')
+      .attr('transform','rotate(-90)').attr('x',-ph/2).attr('y',-30)
+      .attr('text-anchor','middle').attr('fill','#DCE8F5').attr('font-size',9)
+      .attr('font-family','Barlow Condensed,sans-serif').attr('letter-spacing','0.1em')
+      .text('VAR');
+    g.append('g').attr('class','sc-gone');
+    g.append('g').attr('class','sc-avail');
+  }
+
+  // ── Data ────────────────────────────────────────────────────────────────
+  const data  = ALL.filter(d => positions.includes(d.POS));
+  const avail = data.filter(d => !drafted.has(d._id));
+  const gone  = data.filter(d =>  drafted.has(d._id));
+
+  const extData = showDrafted ? data : (avail.length ? avail : data);
+  const xe = d3.extent(extData, d=>d.Total_SGP), ye = d3.extent(extData, d=>d.VAR);
+  const xp = ((xe[1]-xe[0])*0.05)||1, yp = ((ye[1]-ye[0])*0.05)||1;
+  const xs = d3.scaleLinear().domain([xe[0]-xp, xe[1]+xp]).range([0, pw]);
+  const ys = d3.scaleLinear().domain([ye[0]-yp, ye[1]+yp]).range([ph, 0]);
+
+  const styleAx = sel => {
+    sel.select('.domain').attr('stroke','#2A3E58');
+    sel.selectAll('text').attr('fill','#DCE8F5').attr('font-size',9).attr('font-family','JetBrains Mono,monospace');
+    sel.selectAll('.tick line').attr('stroke','#2A3E58');
+  };
+
+  // ── Axes (animated) ──────────────────────────────────────────────────────
+  g.select('.sc-ax').transition(T).call(d3.axisBottom(xs).ticks(5).tickSize(3)).call(styleAx);
+  g.select('.sc-ay').transition(T).call(d3.axisLeft(ys).ticks(5).tickSize(3)).call(styleAx);
+
+  // ── Gridlines ────────────────────────────────────────────────────────────
+  g.select('.sc-gx').selectAll('line').data(xs.ticks(5), d=>d)
+    .join(
+      en => en.append('line')
+        .attr('x1',d=>xs(d)).attr('x2',d=>xs(d)).attr('y1',0).attr('y2',ph)
+        .attr('stroke','#1A2840').attr('stroke-width',1).attr('opacity',0)
+        .call(e=>e.transition(T).attr('opacity',1)),
+      up => up.transition(T).attr('x1',d=>xs(d)).attr('x2',d=>xs(d)),
+      ex => ex.transition(T).attr('opacity',0).remove()
+    );
+  g.select('.sc-gy').selectAll('line').data(ys.ticks(5), d=>d)
+    .join(
+      en => en.append('line')
+        .attr('x1',0).attr('x2',pw).attr('y1',d=>ys(d)).attr('y2',d=>ys(d))
+        .attr('stroke','#1A2840').attr('stroke-width',1).attr('opacity',0)
+        .call(e=>e.transition(T).attr('opacity',1)),
+      up => up.transition(T).attr('y1',d=>ys(d)).attr('y2',d=>ys(d)),
+      ex => ex.transition(T).attr('opacity',0).remove()
+    );
+
+  // ── Drafted ghost rings ──────────────────────────────────────────────────
+  g.select('.sc-gone').selectAll('circle').data(showDrafted ? gone : [], d=>d._id)
+    .join(
+      en => en.append('circle')
+        .attr('cx',d=>xs(d.Total_SGP)).attr('cy',d=>ys(d.VAR))
+        .attr('r',0).attr('fill','none')
+        .attr('stroke',d=>POS_COLORS[d.POS]||'#344E6A')
+        .attr('stroke-width',1).attr('opacity',0)
+        .call(e=>e.transition(T).attr('r',3.5).attr('opacity',0.25)),
+      up => up.transition(T)
+        .attr('cx',d=>xs(d.Total_SGP)).attr('cy',d=>ys(d.VAR))
+        .attr('r',3.5).attr('opacity',0.25),
+      ex => ex.transition(T).attr('r',0).attr('opacity',0).remove()
+    );
+
+  // ── Available dots ───────────────────────────────────────────────────────
+  const tip = document.getElementById('tip');
+  const availSel = g.select('.sc-avail').selectAll('circle').data(avail, d=>d._id);
+
+  // Exit: shrink + fade out
+  availSel.exit().transition(T)
+    .attr('r',0).attr('fill-opacity',0).attr('stroke-opacity',0).remove();
+
+  // Enter: spawn at position, animate in
+  const entering = availSel.enter().append('circle')
+    .attr('class', d=>'dot-'+safeId(d._id))
+    .attr('cx', d=>xs(d.Total_SGP)).attr('cy', d=>ys(d.VAR))
+    .attr('r', 0)
+    .attr('fill', d=>POS_COLORS[d.POS]||'#344E6A')
+    .attr('fill-opacity', 0)
+    .attr('stroke', d=>POS_COLORS[d.POS]||'#344E6A')
+    .attr('stroke-width', 1).attr('stroke-opacity', 0)
+    .style('cursor','pointer')
+    .on('mouseover', function(event, d) {
+      hovered = d._id;
+      d3.select(this).attr('r',9).attr('fill-opacity',1).attr('stroke-width',2.5);
+      hlRow(d._id);
+      const p = parseName(d.Player);
+      document.getElementById('tip-name').innerHTML =
+        `${p.name} <span class="tip-team">${p.team}</span>`;
+      document.getElementById('tip-grid').innerHTML = `
+        <span class="tip-k">SGP</span><span class="tip-v">${d.Total_SGP.toFixed(2)}</span>
+        <span class="tip-k">VAR</span><span class="tip-v">${d.VAR.toFixed(2)}</span>
+        <span class="tip-k">Tier</span><span class="tip-v">${d.Tier}</span>
+        <span class="tip-k">Rank</span><span class="tip-v">#${d.OverallRank}</span>
+      `;
+      tip.classList.add('show');
+    })
+    .on('mousemove', event => {
+      tip.style.left = (event.clientX+14)+'px';
+      tip.style.top  = (event.clientY-8)+'px';
+    })
+    .on('mouseout', function() {
+      hovered = null;
+      d3.select(this).attr('r',5).attr('fill-opacity',0.72).attr('stroke-width',1);
+      clearHlRow(); tip.classList.remove('show');
+    });
+
+  entering.transition(T).attr('r',5).attr('fill-opacity',0.72).attr('stroke-opacity',0.9);
+
+  // Update: animate to new axis positions (on filter/draft change)
+  availSel.transition(T)
+    .attr('cx', d=>xs(d.Total_SGP)).attr('cy', d=>ys(d.VAR));
+
+  // ── Legend ───────────────────────────────────────────────────────────────
+  document.getElementById(legId).innerHTML =
+    positions.map(p=>`<div class="legend-item">
+      <div class="legend-dot" style="background:${POS_COLORS[p]}"></div>${p}
+    </div>`).join('');
+}
+
+// ── Table ────────────────────────────────────────────────────────────────────
+function renderTable() {
+  renderHeader();
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  const data = visible();
+
+  data.forEach(d => {
+    const p   = parseName(d.Player);
+    const gone = drafted.has(d._id);
+    const tr = document.createElement('tr');
+    if (gone) tr.classList.add('drafted');
+    tr.dataset.id = d._id;
+
+    const statCells = (showRawStats ? COL_DEFS.raw : COL_DEFS.sgp)
+      .map(({col, fmt}) => `<td>${fmt(d[col])}</td>`).join('');
+
+    tr.innerHTML = `
+      <td class="rank">${d.SGP_Rank}</td>
+      <td class="rank">${d.OverallRank}</td>
+      <td class="pcell">
+        <div class="pname">${p.name}</div>
+        <div class="pteam">${p.team}</div>
+      </td>
+      <td><span class="pp pp-${d.POS}">${d.POS}</span></td>
+      <td><span class="tb tb${Math.min(+d.Tier||5,10)}">${d.Tier}</span></td>
+      ${statCells}
+      <td><button class="dbtn ${gone?'undraft':''}" data-id="${esc(d._id)}">${gone?'Undraft':'Draft'}</button></td>
+    `;
+
+    if (!gone) {
+      tr.addEventListener('mouseenter', () => { hovered=d._id; hlDot(d._id); });
+      tr.addEventListener('mouseleave', () => { hovered=null; clearHlDot(); });
+    }
+
+    tbody.appendChild(tr);
+  });
+
+  // Draft buttons
+  tbody.querySelectorAll('.dbtn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      drafted.has(id) ? drafted.delete(id) : drafted.add(id);
+      render();
+    });
+  });
+}
+
+// ── Highlight helpers ────────────────────────────────────────────────────────
+function hlRow(id) {
+  document.querySelectorAll('#tbody tr').forEach(tr => {
+    const on = tr.dataset.id === id;
+    tr.classList.toggle('hl', on);
+  });
+}
+function clearHlRow() {
+  document.querySelectorAll('#tbody tr.hl').forEach(tr => tr.classList.remove('hl'));
+}
+function hlDot(id) {
+  d3.selectAll('.dot-'+safeId(id)).attr('r',9).attr('fill-opacity',1).attr('stroke-width',2.5);
+}
+function clearHlDot() {
+  d3.selectAll('[class^="dot-"]').attr('r',5).attr('fill-opacity',0.72).attr('stroke-width',1);
+}
+
+// ── Controls ─────────────────────────────────────────────────────────────────
+function updatePillStates() {
+  document.querySelectorAll('.pill').forEach(p => {
+    const pos = p.dataset.pos;
+    p.classList.toggle('active', pos === 'ALL' ? posFil.size === 0 : posFil.has(pos));
+  });
+}
+
+function setupControls() {
+  document.getElementById('pos-pills').addEventListener('click', e => {
+    const pill = e.target.closest('.pill');
+    if (!pill) return;
+    const pos = pill.dataset.pos;
+    const multi = e.ctrlKey || e.metaKey;
+    if (pos === 'ALL' || !multi) {
+      posFil = pos === 'ALL' ? new Set() : new Set([pos]);
+    } else {
+      if (posFil.has(pos)) posFil.delete(pos); else posFil.add(pos);
+    }
+    updatePillStates();
+    renderScatters();
+    renderTable();
+  });
+
+  document.getElementById('tog-wrap').addEventListener('click', () => {
+    showDrafted = !showDrafted;
+    document.getElementById('tog').classList.toggle('on', showDrafted);
+    render();
+  });
+
+  document.querySelector('table').addEventListener('click', e => {
+    const th = e.target.closest('th[data-col]');
+    if (!th) return;
+    const col = th.dataset.col;
+    sortDir = sortCol === col && sortDir === 'desc' ? 'asc' : 'desc';
+    sortCol = col;
+    renderTable();
+  });
+
+  document.getElementById('search').addEventListener('input', e => {
+    searchQ = e.target.value.toLowerCase().trim();
+    renderTable();
+  });
+
+  document.getElementById('stat-tog-wrap').addEventListener('click', () => {
+    showRawStats = !showRawStats;
+    document.getElementById('stat-tog').classList.toggle('on', showRawStats);
+    const activeCols = showRawStats ? COL_DEFS.raw : COL_DEFS.sgp;
+    const fixedCols  = ['Player','POS','Tier','OverallRank'];
+    if (!activeCols.some(c => c.col === sortCol) && !fixedCols.includes(sortCol)) {
+      sortCol = 'VAR'; sortDir = 'desc';
+    }
+    renderTable();
+  });
+}
+
+// ── Format helpers ───────────────────────────────────────────────────────────
+function fN(v) { return (+v).toFixed(2); }
+function fRaw(v) {
+  const n = +v;
+  if (isNaN(n) || n === 0) return '<span class="dim-num">—</span>';
+  return Math.round(n);
+}
+function fRatStat(v, dp) {
+  const n = +v;
+  if (isNaN(n) || n === 0) return '<span class="dim-num">—</span>';
+  return n.toFixed(dp).replace(/^0\./, '.');
+}
+function fV(v) {
+  const n = +v;
+  if (isNaN(n)) return '<span class="dim-num">—</span>';
+  const cls = n >= 0 ? 'pos-num' : 'neg-num';
+  return `<span class="${cls}">${n.toFixed(2)}</span>`;
+}
+function fS(v) {
+  const n = +v;
+  if (!n || Math.abs(n) < 0.005) return '<span class="dim-num">—</span>';
+  return n.toFixed(2);
+}
+function safeId(s) { return s.replace(/[^a-zA-Z0-9]/g,'_'); }
+function esc(s) { return s.replace(/"/g,'&quot;'); }
+
+// ── Sample data ──────────────────────────────────────────────────────────────
+function sampleData() {
+  return [
+    {Player:"Aaron Judge (NYY - LF,CF,RF,DH)",POS:"OF",OverallRank:1,Total_SGP:23.1,VAR:13.6,Tier:1,RSGP:3.2,HRSGP:4.1,RBISGP:3.8,SBSGP:0.4,OBPSGP:2.0,KSGP:0,QSSGP:0,SVSGP:0,ERASGP:0,WHIPSGP:0},
+    {Player:"Tarik Skubal (DET - SP)",POS:"SP",OverallRank:2,Total_SGP:13.1,VAR:12.4,Tier:1,RSGP:0,HRSGP:0,RBISGP:0,SBSGP:0,OBPSGP:0,KSGP:2.8,QSSGP:1.9,SVSGP:0,ERASGP:4.6,WHIPSGP:3.8},
+    {Player:"Juan Soto (NYM - LF,RF)",POS:"OF",OverallRank:3,Total_SGP:21.9,VAR:12.4,Tier:1,RSGP:3.0,HRSGP:3.1,RBISGP:3.2,SBSGP:0.3,OBPSGP:2.3,KSGP:0,QSSGP:0,SVSGP:0,ERASGP:0,WHIPSGP:0},
+    {Player:"Paul Skenes (PIT - SP)",POS:"SP",OverallRank:4,Total_SGP:11.0,VAR:10.4,Tier:2,RSGP:0,HRSGP:0,RBISGP:0,SBSGP:0,OBPSGP:0,KSGP:2.5,QSSGP:1.7,SVSGP:0,ERASGP:3.9,WHIPSGP:2.9},
+    {Player:"Garrett Crochet (BOS - SP)",POS:"SP",OverallRank:5,Total_SGP:10.2,VAR:9.6,Tier:2,RSGP:0,HRSGP:0,RBISGP:0,SBSGP:0,OBPSGP:0,KSGP:3.2,QSSGP:1.4,SVSGP:0,ERASGP:3.2,WHIPSGP:2.4},
+    {Player:"Ronald Acuna Jr. (ATL - RF)",POS:"OF",OverallRank:6,Total_SGP:18.6,VAR:9.1,Tier:2,RSGP:2.8,HRSGP:2.2,RBISGP:2.4,SBSGP:1.6,OBPSGP:1.6,KSGP:0,QSSGP:0,SVSGP:0,ERASGP:0,WHIPSGP:0},
+    {Player:"Cal Raleigh (SEA - C,DH)",POS:"C",OverallRank:7,Total_SGP:15.6,VAR:8.5,Tier:2,RSGP:1.8,HRSGP:3.2,RBISGP:2.8,SBSGP:0.1,OBPSGP:1.1,KSGP:0,QSSGP:0,SVSGP:0,ERASGP:0,WHIPSGP:0},
+    {Player:"Jose Ramirez (CLE - 3B,DH)",POS:"3B",OverallRank:8,Total_SGP:16.9,VAR:8.4,Tier:2,RSGP:2.5,HRSGP:2.8,RBISGP:3.1,SBSGP:1.2,OBPSGP:1.3,KSGP:0,QSSGP:0,SVSGP:0,ERASGP:0,WHIPSGP:0},
+    {Player:"Kyle Tucker (LAD - RF,DH)",POS:"OF",OverallRank:9,Total_SGP:17.6,VAR:8.1,Tier:2,RSGP:2.4,HRSGP:2.9,RBISGP:3.0,SBSGP:1.0,OBPSGP:1.3,KSGP:0,QSSGP:0,SVSGP:0,ERASGP:0,WHIPSGP:0},
+    {Player:"Kyle Schwarber (PHI - LF,DH)",POS:"OF",OverallRank:10,Total_SGP:17.5,VAR:7.97,Tier:2,RSGP:2.5,HRSGP:3.3,RBISGP:2.8,SBSGP:0.2,OBPSGP:1.7,KSGP:0,QSSGP:0,SVSGP:0,ERASGP:0,WHIPSGP:0},
+    {Player:"Bryan Woo (SEA - SP)",POS:"SP",OverallRank:11,Total_SGP:8.6,VAR:7.96,Tier:2,RSGP:0,HRSGP:0,RBISGP:0,SBSGP:0,OBPSGP:0,KSGP:1.9,QSSGP:1.5,SVSGP:0,ERASGP:2.8,WHIPSGP:2.4},
+    {Player:"Mason Miller (SD - RP)",POS:"RP",OverallRank:12,Total_SGP:7.5,VAR:7.93,Tier:2,RSGP:0,HRSGP:0,RBISGP:0,SBSGP:0,OBPSGP:0,KSGP:1.2,QSSGP:0,SVSGP:4.1,ERASGP:1.5,WHIPSGP:0.7},
+    {Player:"Edwin Diaz (LAD - RP)",POS:"RP",OverallRank:13,Total_SGP:6.93,VAR:7.35,Tier:3,RSGP:0,HRSGP:0,RBISGP:0,SBSGP:0,OBPSGP:0,KSGP:1.1,QSSGP:0,SVSGP:3.8,ERASGP:1.3,WHIPSGP:0.73},
+    {Player:"Bobby Witt Jr. (KC - SS)",POS:"SS",OverallRank:16,Total_SGP:17.9,VAR:7.07,Tier:3,RSGP:2.6,HRSGP:2.4,RBISGP:2.9,SBSGP:2.0,OBPSGP:1.1,KSGP:0,QSSGP:0,SVSGP:0,ERASGP:0,WHIPSGP:0},
+    {Player:"Mookie Betts (LAD - 2B,RF)",POS:"2B",OverallRank:20,Total_SGP:13.9,VAR:5.3,Tier:3,RSGP:2.4,HRSGP:1.9,RBISGP:2.0,SBSGP:0.9,OBPSGP:1.7,KSGP:0,QSSGP:0,SVSGP:0,ERASGP:0,WHIPSGP:0},
+    {Player:"Francisco Lindor (NYM - SS)",POS:"SS",OverallRank:22,Total_SGP:14.8,VAR:3.9,Tier:4,RSGP:2.2,HRSGP:2.0,RBISGP:2.3,SBSGP:0.8,OBPSGP:1.1,KSGP:0,QSSGP:0,SVSGP:0,ERASGP:0,WHIPSGP:0},
+    {Player:"Freddie Freeman (LAD - 1B)",POS:"1B",OverallRank:18,Total_SGP:14.4,VAR:3.7,Tier:4,RSGP:2.3,HRSGP:1.8,RBISGP:2.6,SBSGP:0.3,OBPSGP:1.9,KSGP:0,QSSGP:0,SVSGP:0,ERASGP:0,WHIPSGP:0},
+    {Player:"Yordan Alvarez (HOU - LF,DH)",POS:"OF",OverallRank:19,Total_SGP:14.2,VAR:4.7,Tier:3,RSGP:2.0,HRSGP:2.7,RBISGP:2.8,SBSGP:0.1,OBPSGP:1.6,KSGP:0,QSSGP:0,SVSGP:0,ERASGP:0,WHIPSGP:0},
+  ];
+}
+
+boot();
+</script>
+</body>
+</html>
